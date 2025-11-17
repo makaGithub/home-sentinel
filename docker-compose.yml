@@ -1,0 +1,58 @@
+version: "3.9"
+
+services:
+  compreface:
+    image: exadel/compreface:latest
+    container_name: compreface
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+
+  yolov8:
+    build:
+      context: ./vision_bridge
+      dockerfile: Dockerfile
+      cache_from:
+        - type=local,src=data/.buildx-cache
+      cache_to:
+        - type=local,dest=data/.buildx-cache,mode=max
+    container_name: yolov8-detector
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    env_file:
+      - .env
+    volumes:
+      # Монтируем код в /app/code (чтобы избежать конфликтов с cache и models)
+      - ./vision_bridge:/app/code
+      # Монтируем директории данных (они должны существовать на хосте ДО запуска)
+      - ./data/vision_bridge/cache:/app/cache
+      - ./data/vision_bridge/models:/app/models
+    working_dir: /app/code
+    command: ["python3.10", "vision_bridge.py"]
+
+  whisper:
+    image: willh/openai-whisper
+    container_name: whisper
+    restart: unless-stopped
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ./data/whisper/config:/config
+      - ./data/whisper/audio:/audio
+    ports:
+      - "10300:10300"
+
