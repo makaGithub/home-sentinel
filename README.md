@@ -1,19 +1,14 @@
-# ha-ai-stack
+# home-sentinel
 Home assistant AI stack с поддержкой GPU
 
 ## Структура проекта
 
 ```
-ha-ai-stack/
-├── vision_bridge/          # Код сервиса детекции объектов и распознавания лиц
-├── whisper/                # Код сервиса распознавания речи (если есть)
+home-sentinel/
+├── code/                   # Код сервиса детекции объектов и распознавания лиц
 ├── data/                   # Все данные отдельно от кода
-│   ├── vision_bridge/
-│   │   ├── cache/          # Кэши embeddings
-│   │   └── models/         # Модели InsightFace и YOLO
-│   ├── whisper/
-│   │   ├── audio/          # Аудио файлы
-│   │   └── config/         # Конфигурация whisper
+│   ├── cache/              # Кэши embeddings
+│   ├── models/             # Модели InsightFace и YOLO
 │   └── .buildx-cache/      # Docker buildx кэш
 ├── docker-compose.yml      # Конфигурация Docker Compose
 ├── setup-host.sh           # Скрипт настройки хоста
@@ -22,26 +17,24 @@ ha-ai-stack/
 
 ### Компоненты
 
-- **vision_bridge/** - сервис детекции объектов и распознавания лиц (YOLOv8 + InsightFace)
-- **whisper/** - сервис распознавания речи (OpenAI Whisper)
-- **compreface** - сервис распознавания лиц (CompreFace)
+- **code/** - сервис детекции объектов и распознавания лиц (YOLOv8 + InsightFace)
 - **data/** - все данные (кэши, модели, конфигурации) отдельно от кода
 
 ## Требования
 
-- **Локально (Mac)**: Git, SSH доступ к удаленному хосту
+- **Локально**: Git, SSH доступ к удаленному хосту
 - **Удаленный хост**: Ubuntu 24.04.3, NVIDIA GPU, Docker
 
 ## Настройка и деплой на удаленный GPU хост
 
 ### Первоначальная настройка
 
-#### 1. Настройка локального окружения (Mac)
+#### 1. Настройка локального окружения
 
 1. **Клонируйте репозиторий локально:**
    ```bash
-   git clone <your-repo-url> ~/projects/ha-ai-stack
-   cd ~/projects/ha-ai-stack
+   git clone <your-repo-url> ~/projects/home-sentinel
+   cd ~/projects/home-sentinel
    ```
 
 2. **Настройте SSH доступ к удаленному хосту:**
@@ -60,8 +53,8 @@ ha-ai-stack/
 1. **Клонируйте репозиторий на удаленном хосте:**
    ```bash
    ssh user@your-gpu-server.com
-   git clone <your-repo-url> /path/to/ha-ai-stack
-   cd /path/to/ha-ai-stack
+   git clone <your-repo-url> /path/to/home-sentinel
+   cd /path/to/home-sentinel
    ```
 
 2. **Настройте Docker и окружение:**
@@ -77,19 +70,19 @@ ha-ai-stack/
 
 3. **Выйдите и войдите снова** (или выполните `newgrp docker`) для применения изменений группы
 
-4. **Убедитесь, что директории созданы в `data/vision_bridge/`**:
+4. **Убедитесь, что директории созданы в `data/`**:
    ```bash
-   mkdir -p data/vision_bridge/cache data/vision_bridge/models
+   mkdir -p data/cache data/models
    ```
-   Эти директории должны создаваться только в `data/vision_bridge/` через Docker volumes.
+   Эти директории должны создаваться только в `data/` через Docker volumes.
 
 5. **Создайте `.env` файл на удаленном хосте** с необходимыми переменными (см. раздел "Переменные окружения")
 
 ### Workflow разработки
 
-Проект разрабатывается локально на Mac, а запускается и тестируется на удаленном GPU хосте.
+Проект разрабатывается локально, а запускается и тестируется на удаленном GPU хосте.
 
-1. **Редактируйте код локально** в Cursor IDE на Mac
+1. **Редактируйте код локально** в Visual Code IDE
 
 2. **Деплой на удаленный хост:**
    ```bash
@@ -156,7 +149,7 @@ nano .env
 ```
 
 Файл `.env` содержит все настройки проекта, разделенные на блоки:
-- **Конфигурация приложения** (vision_bridge): VIDEO_URL, YOLO_MODEL, INSIGHTFACE_MODEL и т.д.
+- **Конфигурация приложения** (home-sentinel): VIDEO_URL, YOLO_MODEL, INSIGHTFACE_MODEL и т.д.
 - **Конфигурация базы данных Immich**: IMMICH_DB_HOST, IMMICH_DB_PASSWORD и т.д.
 - **Конфигурация деплоя**: REMOTE_HOST, REMOTE_USER, DEPLOY_METHOD и т.д.
 
@@ -166,9 +159,7 @@ nano .env
 
 После деплоя на удаленном хосте доступны следующие сервисы:
 
-- **compreface**: `http://your-gpu-server.com:8000` - сервис распознавания лиц
 - **yolov8-detector**: детекция объектов и лиц (YOLOv8 + InsightFace)
-- **whisper**: `http://your-gpu-server.com:10300` - сервис распознавания речи
 
 ## Troubleshooting
 
@@ -221,7 +212,7 @@ sudo systemctl restart docker
 ./deploy.sh logs
 
 # Или напрямую через SSH
-ssh user@your-gpu-server.com 'cd /path/to/ha-ai-stack && docker compose logs -f'
+ssh user@your-gpu-server.com 'cd /path/to/home-sentinel && docker compose logs -f'
 ```
 
 ## Структура данных

@@ -85,5 +85,5 @@ ENV PYTHONUNBUFFERED=1 \
 
 # --- 5. Команда запуска ---
 # WORKDIR будет установлен в /app/code через docker-compose.yml
-CMD ["python3.10", "vision_bridge.py"]
+CMD ["python3.10", "main.py"]
 
