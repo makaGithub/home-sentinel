@@ -24,7 +24,7 @@ if [ -z "$REMOTE_HOST" ] || [ -z "$REMOTE_USER" ] || [ -z "$REMOTE_PATH" ]; then
     exit 1
 fi
 
-echo -e "${GREEN}🚀 Деплой ha-ai-stack на удаленный хост${NC}"
+echo -e "${GREEN}🚀 Деплой home-sentinel на удаленный хост${NC}"
 echo "Хост: $REMOTE_USER@$REMOTE_HOST"
 echo "Путь: $REMOTE_PATH"
 echo ""
@@ -47,13 +47,32 @@ ensure_data_dirs() {
     echo -e "${YELLOW}📁 Создание необходимых директорий...${NC}"
     
     # Создаем необходимые директории в data/ (они должны существовать ДО запуска контейнера)
-    remote_exec "mkdir -p $REMOTE_PATH/data/vision_bridge/cache"
-    remote_exec "mkdir -p $REMOTE_PATH/data/vision_bridge/models"
-    remote_exec "mkdir -p $REMOTE_PATH/data/whisper/config"
-    remote_exec "mkdir -p $REMOTE_PATH/data/whisper/audio"
+    remote_exec "mkdir -p $REMOTE_PATH/data/cache"
+    remote_exec "mkdir -p $REMOTE_PATH/data/models"
     remote_exec "mkdir -p $REMOTE_PATH/data/.buildx-cache"
     
     echo -e "${GREEN}✅ Директории созданы${NC}"
+}
+
+# Функция для проверки и создания buildx builder для пользователя
+ensure_buildx_builder() {
+    echo -e "${YELLOW}🔧 Проверка buildx builder...${NC}"
+    
+    # Проверяем, существует ли builder sane-builder для пользователя
+    if remote_exec "docker buildx ls 2>/dev/null | grep -q 'sane-builder'" 2>/dev/null; then
+        # Если существует, используем его
+        remote_exec "docker buildx use sane-builder" 2>/dev/null || true
+        echo -e "${GREEN}✅ Builder sane-builder найден и активирован${NC}"
+    else
+        # Если не существует, создаем новый
+        echo -e "${YELLOW}   Создание buildx builder sane-builder...${NC}"
+        remote_exec "docker buildx create --name sane-builder --driver docker-container --use" 2>/dev/null || {
+            echo -e "${YELLOW}   Builder уже существует, активируем...${NC}"
+            remote_exec "docker buildx use sane-builder" 2>/dev/null || true
+        }
+        remote_exec "docker buildx inspect sane-builder --bootstrap" 2>/dev/null || true
+        echo -e "${GREEN}✅ Builder sane-builder создан и активирован${NC}"
+    fi
 }
 
 # Функция для синхронизации через rsync
@@ -148,6 +167,7 @@ main() {
     
     # Сборка и запуск на удаленном хосте
     if [ "${BUILD_REMOTE:-false}" = "true" ]; then
+        ensure_buildx_builder
         echo -e "${YELLOW}🔨 Сборка Docker образов на удаленном хосте...${NC}"
         remote_exec "cd $REMOTE_PATH && export DOCKER_BUILDKIT=1 && export COMPOSE_DOCKER_CLI_BUILD=1 && docker compose build"
     fi
@@ -187,6 +207,7 @@ case "${1:-}" in
         fi
         ;;
     build)
+        ensure_buildx_builder
         remote_exec "cd $REMOTE_PATH && export DOCKER_BUILDKIT=1 && export COMPOSE_DOCKER_CLI_BUILD=1 && docker compose build"
         ;;
     restart)
