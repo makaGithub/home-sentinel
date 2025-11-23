@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  home-sentinel:
+    build:
+      context: ./code
+      dockerfile: Dockerfile
+      cache_from:
+        - type=local,src=data/.buildx-cache
+      cache_to:
+        - type=local,dest=data/.buildx-cache,mode=max
+    container_name: home-sentinel
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    env_file:
+      - .env
+    volumes:
+      # Монтируем код в /app/code (чтобы избежать конфликтов с cache и models)
+      - ./code:/app/code
+      # Монтируем директории данных (они должны существовать на хосте ДО запуска)
+      - ./data/cache:/app/cache
+      - ./data/models:/app/models
+    working_dir: /app/code
+    command: ["python3.10", "main.py"]
