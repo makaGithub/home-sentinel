@@ -214,12 +214,27 @@ def create_github_release(files, env_vars=None, version=None):
             return
         
         # Проверяем, есть ли gh CLI
-        gh_result = subprocess.run(['gh', '--version'], 
-                                  capture_output=True, text=True)
-        if gh_result.returncode != 0:
+        try:
+            gh_result = subprocess.run(['gh', '--version'], 
+                                      capture_output=True, text=True, 
+                                      timeout=5)
+            if gh_result.returncode != 0:
+                raise FileNotFoundError("GitHub CLI не найден")
+        except FileNotFoundError:
             print("⚠️  GitHub CLI (gh) не установлен")
-            print("   Установите: https://cli.github.com/")
-            print("   Или используйте GitHub Actions для автоматического создания Release")
+            print("   Для создания GitHub Release локально установите GitHub CLI:")
+            print("   - macOS: brew install gh")
+            print("   - Linux: apt install gh (или следуйте инструкциям на https://cli.github.com/)")
+            print("   - Windows: winget install GitHub.cli")
+            print("")
+            print("   После установки авторизуйтесь: gh auth login")
+            print("")
+            print("   Альтернатива: используйте GitHub Actions для автоматического создания Release")
+            print("   Запустите workflow 'Publish Documentation' с опцией 'Create GitHub Release'")
+            return
+        except Exception as e:
+            print(f"⚠️  Ошибка при проверке GitHub CLI: {e}")
+            print("   Установите GitHub CLI: https://cli.github.com/")
             return
         
         # Создаем Release через gh CLI
