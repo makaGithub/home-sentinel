@@ -55,12 +55,22 @@ HTML документация автоматически публикуется 
    - Установите "Create GitHub Release" = true
    - Укажите версию (опционально)
 
-2. **Локально**:
+2. **Локально** (требуется GitHub CLI):
    ```bash
+   # Установите GitHub CLI (если еще не установлен)
+   # macOS: brew install gh
+   # Linux: apt install gh
+   # Windows: winget install GitHub.cli
+   
+   # Авторизуйтесь
+   gh auth login
+   
+   # Создайте Release
    python contrib/generate_doc.py --release --version 1.0.0
    python contrib/generate_pptx.py --release --version 1.0.0
    ```
-   Требуется установленный и авторизованный GitHub CLI (`gh`).
+   
+   **Примечание**: Если GitHub CLI не установлен, используйте GitHub Actions для создания Release (см. выше).
 
 ## Настройка
 
