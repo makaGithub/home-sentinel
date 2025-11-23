@@ -1,0 +1,159 @@
+name: Publish Documentation
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'docs/source/**'
+      - 'contrib/generate_*.py'
+  workflow_dispatch:
+    inputs:
+      publish_doc:
+        description: 'Generate and publish DOCX document'
+        required: false
+        default: 'true'
+        type: boolean
+      publish_pptx:
+        description: 'Generate and publish PPTX presentation'
+        required: false
+        default: 'true'
+        type: boolean
+      publish_html:
+        description: 'Generate and publish HTML presentation'
+        required: false
+        default: 'true'
+        type: boolean
+      create_release:
+        description: 'Create GitHub Release with DOCX/PPTX'
+        required: false
+        default: 'false'
+        type: boolean
+      release_version:
+        description: 'Release version (e.g., 1.0.0, leave empty for auto)'
+        required: false
+        type: string
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+    
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+    
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install python-docx python-pptx
+    
+      - name: Generate documentation
+        id: generate
+        run: |
+          mkdir -p build docs/_build/html
+          
+          DOCX_FILE=""
+          PPTX_FILE=""
+          HTML_FILE=""
+          
+          # Генерируем DOCX
+          if [ "${{ github.event.inputs.publish_doc }}" != "false" ] && ([ -z "${{ github.event.inputs.publish_doc }}" ] || [ "${{ github.event.inputs.publish_doc }}" == "true" ]); then
+            echo "📄 Генерация DOCX..."
+            python contrib/generate_doc.py || echo "Failed to generate DOCX"
+            DOCX_FILE=$(find build -name "project_*.docx" -type f | head -n 1 || echo "")
+            if [ -n "$DOCX_FILE" ]; then
+              echo "docx_file=$DOCX_FILE" >> $GITHUB_OUTPUT
+              echo "✅ DOCX создан: $DOCX_FILE"
+            fi
+          fi
+          
+          # Генерируем PPTX
+          if [ "${{ github.event.inputs.publish_pptx }}" != "false" ] && ([ -z "${{ github.event.inputs.publish_pptx }}" ] || [ "${{ github.event.inputs.publish_pptx }}" == "true" ]); then
+            echo "📊 Генерация PPTX..."
+            python contrib/generate_pptx.py || echo "Failed to generate PPTX"
+            PPTX_FILE=$(find build -name "presentation_*.pptx" -type f | head -n 1 || echo "")
+            if [ -n "$PPTX_FILE" ]; then
+              echo "pptx_file=$PPTX_FILE" >> $GITHUB_OUTPUT
+              echo "✅ PPTX создан: $PPTX_FILE"
+            fi
+          fi
+          
+          # Генерируем HTML
+          if [ "${{ github.event.inputs.publish_html }}" != "false" ] && ([ -z "${{ github.event.inputs.publish_html }}" ] || [ "${{ github.event.inputs.publish_html }}" == "true" ]); then
+            echo "🌐 Генерация HTML..."
+            python contrib/generate_html_presentation.py || echo "Failed to generate HTML"
+            HTML_FILE=$(find docs/_build/html -name "presentation_*.html" -type f | sort | tail -n 1 || echo "")
+            if [ -n "$HTML_FILE" ]; then
+              # Создаем index.html (всегда обновляем до последнего)
+              cp "$HTML_FILE" docs/_build/html/index.html
+              echo "✅ Создан/обновлен index.html из последнего HTML файла"
+              echo "html_file=$HTML_FILE" >> $GITHUB_OUTPUT
+              echo "✅ HTML создан: $HTML_FILE"
+            fi
+          fi
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-files
+          path: |
+            build/*.docx
+            build/*.pptx
+            docs/_build/html/
+          retention-days: 30
+      
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+      
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs/_build/html
+      
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+      
+      - name: Create GitHub Release
+        if: |
+          (github.event.inputs.create_release == 'true' || 
+           (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]'))) &&
+          (steps.generate.outputs.docx_file != '' || steps.generate.outputs.pptx_file != '')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: docs-v${{ github.event.inputs.release_version || github.run_number }}
+          name: Documentation Release ${{ github.event.inputs.release_version || github.run_number }}
+          body: |
+            ## 📚 Documentation Release
+            
+            This release contains generated documentation files.
+            
+            ### Files included:
+            - Project documentation (DOCX)
+            - Presentation slides (PPTX)
+            
+            ### 📖 Online version:
+            Documentation is also available at: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+            
+            ---
+            
+            *Generated automatically by GitHub Actions*
+          files: |
+            ${{ steps.generate.outputs.docx_file }}
+            ${{ steps.generate.outputs.pptx_file }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
