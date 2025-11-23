@@ -4,7 +4,7 @@ main.py — модульный home-sentinel для Immich.
 
 Функции:
 - YOLOv11 детекция объектов
-- InsightFace (antelopev2) распознавание лиц (embeddings из Immich)
+- InsightFace (antelopev2) распознавание лиц (векторные представления из Immich)
 - Анти-дребезг
 - Лог "кто в кадре"
 - Запись статистики по людям
@@ -46,7 +46,7 @@ def compute_face_similarity(
     person_confidences: list | None = None,
 ) -> float:
     """
-    Вычисляет максимальное сходство между лицом и всеми embeddings человека.
+    Вычисляет максимальное сходство между лицом и всеми векторными представлениями человека.
     Немного учитывает confidence, если он есть.
     """
     if not person_embeddings_list:
@@ -283,7 +283,7 @@ if __name__ == "__main__":
     audio = AudioDetector()
     audio.start()
 
-    # Загружаем embeddings Immich
+    # Загружаем векторные представления Immich
     all_embeddings_list, names, ids, all_confidences_list = load_or_refresh_cache()
 
     # Запускаем основной цикл видео
