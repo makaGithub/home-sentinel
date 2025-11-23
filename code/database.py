@@ -1,6 +1,6 @@
 # database.py
 """
-Работа с PostgreSQL Immich: вытаскивание embeddings и confidence.
+Работа с PostgreSQL Immich: вытаскивание векторных представлений и confidence.
 """
 
 import json
@@ -15,10 +15,10 @@ from utils import log, _l2_normalize
 
 def fetch_embeddings_from_db():
     """
-    Грузит embeddings из Immich:
+    Грузит векторные представления из Immich:
     - p.id, p.name, fs.embedding, af.confidence (если доступно)
     - группирует по personId
-    - нормализует каждый embedding
+    - нормализует каждое векторное представление
     Возвращает:
         all_embs_list: List[List[np.ndarray]]
         names: List[str]
@@ -135,7 +135,7 @@ def fetch_embeddings_from_db():
 
     log(f"✅ Обработка завершена. Найдено {len(by_id)} уникальных персон")
 
-    log("📦 Формирую финальные списки embeddings...")
+    log("📦 Формирую финальные списки векторных представлений...")
     ids, names, all_embs_list = [], [], []
     all_confidences_list = []
 
@@ -156,7 +156,7 @@ def fetch_embeddings_from_db():
         ids, names, all_embs_list, all_confidences_list
     ):
         avg_conf = sum(confs_list) / len(confs_list) if confs_list else 0.0
-        log(f"   - {pid:<4} | {name} ({len(embs_list)} embeddings, avg confidence={avg_conf:.2f})")
+        log(f"   - {pid:<4} | {name} ({len(embs_list)} векторов, avg confidence={avg_conf:.2f})")
 
     total_time = time.time() - start_time
     log(f"✅ Загрузка из базы завершена за {total_time:.2f} сек")

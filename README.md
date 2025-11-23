@@ -7,7 +7,7 @@ Home assistant AI stack с поддержкой GPU
 home-sentinel/
 ├── code/                   # Код сервиса детекции объектов и распознавания лиц
 ├── data/                   # Все данные отдельно от кода
-│   ├── cache/              # Кэши embeddings
+│   ├── cache/              # Кэши векторных представлений
 │   ├── models/             # Модели InsightFace и YOLO
 │   └── .buildx-cache/      # Docker buildx кэш
 ├── docker-compose.yml      # Конфигурация Docker Compose

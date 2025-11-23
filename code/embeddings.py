@@ -1,6 +1,6 @@
 # embeddings.py
 """
-Загрузка и кэширование embeddings лиц из Immich.
+Загрузка и кэширование векторных представлений лиц из Immich.
 """
 
 import json
@@ -15,7 +15,7 @@ from database import fetch_embeddings_from_db
 
 def load_or_refresh_cache(force_refresh: bool = False):
     """
-    Загружает embeddings из кэша, либо при необходимости — из базы Immich.
+    Загружает векторные представления из кэша, либо при необходимости — из базы Immich.
     Новый формат:
         - embeddings_list.json: список списков векторов
         - confidences_list.json: список списков confidence
@@ -33,7 +33,7 @@ def load_or_refresh_cache(force_refresh: bool = False):
     )
 
     if cache_exists and not force_refresh:
-        log("📦 Загружаю embeddings из кэша...")
+        log("📦 Загружаю векторные представления из кэша...")
         with open(embeddings_list_path, "r", encoding="utf-8") as f:
             embeddings_data = json.load(f)
 
@@ -67,7 +67,7 @@ def load_or_refresh_cache(force_refresh: bool = False):
                 avg_conf = sum(confs_list) / len(confs_list) if confs_list else 0.0
                 log(
                     f"   - {pid:<4} | {name} "
-                    f"({len(embs_list)} embeddings, avg confidence={avg_conf:.2f})"
+                    f"({len(embs_list)} векторов, avg confidence={avg_conf:.2f})"
                 )
 
         return all_embs_list, names, ids, all_confidences_list
@@ -82,7 +82,7 @@ def load_or_refresh_cache(force_refresh: bool = False):
     with open(confidences_list_path, "w", encoding="utf-8") as f:
         json.dump(all_confidences_list, f, indent=2)
 
-    # Старый формат — средние embeddings по человеку
+    # Старый формат — средние векторные представления по человеку
     if all_embs_list:
         mean_embs = np.array(
             [np.vstack(person_embs).mean(axis=0) for person_embs in all_embs_list]
