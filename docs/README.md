@@ -44,7 +44,7 @@ python contrib/generate_pptx.py --release --version 1.0.0
 ## GitHub Pages
 
 HTML документация автоматически публикуется по адресу:
-`https://<username>.github.io/<repository-name>/`
+`https://makaGithub.github.io/home-sentinel/`
 
 ## GitHub Releases
 

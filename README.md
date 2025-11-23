@@ -1,6 +1,11 @@
 # home-sentinel
 Home assistant AI stack с поддержкой GPU
 
+## 📚 Документация
+
+- **📖 Онлайн документация**: [GitHub Pages](https://makaGithub.github.io/home-sentinel/)
+- **📦 Releases**: [GitHub Releases](https://github.com/makaGithub/home-sentinel/releases)
+
 ## Структура проекта
 
 ```
