@@ -3,7 +3,7 @@
 Генерация документа проекта home-sentinel из project.md
 
 Использование:
-    python3 contrib/generate_doc.py
+    python3 scripts/generate_doc.py
 
 Скрипт читает docs/project.md и генерирует docs/project.docx с заданным форматированием.
 
@@ -35,7 +35,7 @@ import argparse
 
 try:
     from docx import Document
-    from docx.shared import Pt, Cm
+    from docx.shared import Pt, Cm, Inches
     from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
@@ -57,9 +57,10 @@ except ImportError as e:
     print("   Используются значения по умолчанию")
 
 # Константы форматирования
+# Требования: см. docs/format_requirements.md
 FONT_NAME = 'Times New Roman'
-FONT_SIZE = 12
-LINE_SPACING = 1.15
+FONT_SIZE = 14  # Кегль 14
+LINE_SPACING = 1.0  # Интервал 1 (одинарный)
 
 # Размеры заголовков
 HEADING_SIZES = {1: 16, 2: 14, 3: 13}
@@ -243,6 +244,18 @@ def parse_markdown(md_file):
             elements.append(('numbered_item', text, indent_level))
             continue
         
+        # Изображения ![alt](path)
+        image_match = re.match(r'^!\[([^\]]*)\]\(([^)]+)\)$', line.strip())
+        if image_match:
+            if current_paragraph:
+                elements.append(('paragraph', '\n'.join(current_paragraph)))
+                current_paragraph = []
+            alt_text = image_match.group(1)
+            image_path = image_match.group(2)
+            elements.append(('image', image_path, alt_text))
+            in_list = False
+            continue
+        
         # Пустая строка
         if not line.strip():
             if current_paragraph:
@@ -259,7 +272,16 @@ def parse_markdown(md_file):
             else:
                 current_paragraph = [line]
         else:
-            current_paragraph.append(line)
+            # Для титульного листа разбиваем каждую строку отдельно
+            if is_title_page and line.strip():
+                # Если есть накопленный параграф, сохраняем его
+                if current_paragraph:
+                    elements.append(('paragraph', '\n'.join(current_paragraph)))
+                    current_paragraph = []
+                # Добавляем текущую строку как отдельный параграф
+                elements.append(('paragraph', line))
+            else:
+                current_paragraph.append(line)
     
     # Добавляем последний параграф
     if current_paragraph:
@@ -270,7 +292,77 @@ def parse_markdown(md_file):
 def generate_doc_from_markdown(md_file, output_file):
     """Генерирует DOCX документ из markdown файла"""
     print(f"📄 Чтение {md_file}...")
-    elements = parse_markdown(md_file)
+    
+    # Загружаем переменные из .env для подстановки в титульный лист
+    try:
+        env_vars = load_env_file()
+        # Читаем файл и заменяем плейсхолдеры
+        with open(md_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Заменяем плейсхолдеры на значения из .env
+        print("🔍 Замена плейсхолдеров...")
+        replaced_count = 0
+        for key, value in env_vars.items():
+            if key.startswith('CONFERENCE_') or key.startswith('PROJECT_') or \
+               key.startswith('AUTHOR_') or key.startswith('SUPERVISOR_'):
+                placeholder = '{' + key + '}'
+                if placeholder in content:
+                    replacement = value or ''
+                    if replacement:
+                        content = content.replace(placeholder, replacement)
+                        replaced_count += 1
+                        print(f"   ✓ {placeholder} → {replacement[:50]}{'...' if len(replacement) > 50 else ''}")
+                    else:
+                        print(f"   ⚠️  {placeholder} → (пустое значение)")
+        
+        print(f"   Заменено плейсхолдеров: {replaced_count}")
+        
+        # Специальная обработка для SUPERVISOR_DEGREE и SUPERVISOR_DEGREE_SPACE
+        supervisor_degree = env_vars.get('SUPERVISOR_DEGREE', '').strip()
+        if not supervisor_degree:
+            # Если степень пуста, убираем всю строку с степенью и пробелом
+            content = re.sub(r'\{SUPERVISOR_DEGREE\}\{SUPERVISOR_DEGREE_SPACE\}\n?', '', content)
+            content = re.sub(r'\{SUPERVISOR_DEGREE_SPACE\}\n?', '', content)
+        else:
+            # Если есть степень, заменяем оба плейсхолдера
+            content = content.replace('{SUPERVISOR_DEGREE}{SUPERVISOR_DEGREE_SPACE}', 
+                                    supervisor_degree + '\n')
+            content = content.replace('{SUPERVISOR_DEGREE}', supervisor_degree)
+            content = content.replace('{SUPERVISOR_DEGREE_SPACE}', '')
+        
+        # Убираем оставшиеся SUPERVISOR_DEGREE_SPACE (на случай, если они остались)
+        content = content.replace('{SUPERVISOR_DEGREE_SPACE}', '')
+        
+        # Проверяем, остались ли необработанные плейсхолдеры
+        remaining_placeholders = re.findall(r'\{[A-Z_]+\}', content)
+        if remaining_placeholders:
+            unique_placeholders = set(remaining_placeholders)
+            print(f"⚠️  Предупреждение: найдены необработанные плейсхолдеры: {', '.join(unique_placeholders)}")
+            print("   Убедитесь, что все необходимые переменные заданы в .env файле")
+            # Показываем, какие переменные есть в .env
+            available_vars = [k for k in env_vars.keys() if k.startswith(('CONFERENCE_', 'PROJECT_', 'AUTHOR_', 'SUPERVISOR_'))]
+            print(f"   Доступные переменные в .env: {', '.join(available_vars)}")
+        
+        # Сохраняем во временный файл для парсинга
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as tmp:
+            tmp.write(content)
+            tmp_file = tmp.name
+        
+        elements = parse_markdown(tmp_file)
+        
+        # Удаляем временный файл
+        os.unlink(tmp_file)
+    except Exception as e:
+        print(f"⚠️  Предупреждение: не удалось загрузить данные из .env: {e}")
+        print("   Используется исходный файл без подстановки переменных")
+        import traceback
+        traceback.print_exc()
+        elements = parse_markdown(md_file)
+    else:
+        # Если загрузка .env успешна, elements уже определен выше
+        pass
     
     # Первый проход: собираем все заголовки для оглавления
     print("📋 Сбор заголовков для оглавления...")
@@ -365,17 +457,148 @@ def generate_doc_from_markdown(md_file, output_file):
             if not text:
                 continue
             
-            # Специальная обработка для титульного листа (первые несколько элементов)
-            # Проверяем, не является ли это частью титульного листа
-            if i < 5 and (text == 'Home Assistant AI Stack с поддержкой GPU' or 
-                        text == 'Интеллектуальная система мониторинга и распознавания для умного дома'):
-                if text == 'Home Assistant AI Stack с поддержкой GPU':
-                    # Подзаголовок титульного листа
-                    subtitle_para = doc.add_paragraph()
-                    subtitle_run = subtitle_para.add_run(text)
-                    subtitle_run.font.name = FONT_NAME
-                    subtitle_run.font.size = Pt(14)
-                    subtitle_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            # Специальная обработка для титульного листа
+            # Проверяем, находимся ли мы на титульном листе (до первого разрыва страницы)
+            is_on_title_page = False
+            for j in range(i):
+                if elements[j][0] == 'page_break':
+                    break
+                if j == i - 1:
+                    is_on_title_page = True
+            
+            if is_on_title_page and text != 'Титульный лист':
+                # Проверяем, не остались ли плейсхолдеры в тексте
+                remaining_placeholders_in_text = re.findall(r'\{[A-Z_]+\}', text)
+                if remaining_placeholders_in_text:
+                    print(f"  ⚠️  ВНИМАНИЕ: На титульном листе обнаружены плейсхолдеры в тексте: {text[:60]}...")
+                    print(f"     Плейсхолдеры: {remaining_placeholders_in_text}")
+                    # Пытаемся заменить оставшиеся плейсхолдеры
+                    try:
+                        env_vars = load_env_file()
+                        for placeholder in remaining_placeholders_in_text:
+                            key = placeholder[1:-1]  # Убираем { и }
+                            if key in env_vars:
+                                text = text.replace(placeholder, env_vars[key] or '')
+                                print(f"     ✓ Заменен {placeholder} на значение из .env")
+                    except:
+                        pass
+                
+                # Обрабатываем элементы титульного листа
+                title_page_type = None
+                
+                # Определяем тип элемента
+                if text.startswith('Приложение 2'):
+                    title_page_type = 'appendix'
+                elif text == 'к Положению':
+                    title_page_type = 'appendix_2'
+                elif 'Департамент образования' in text:
+                    title_page_type = 'conference_dept'
+                elif 'Дворец творчества' in text:
+                    title_page_type = 'conference_org'
+                elif 'конференция НОУ' in text:
+                    title_page_type = 'conference_name'
+                elif text.startswith('Секция:'):
+                    title_page_type = 'section'
+                elif 'Тема:' in text:
+                    title_page_type = 'topic'
+                elif text.startswith('Автор:'):
+                    title_page_type = 'author_label'
+                elif text.startswith('Научный руководитель:'):
+                    title_page_type = 'supervisor_label'
+                elif text.startswith('конт. тел.'):
+                    title_page_type = 'phone'
+                elif re.match(r'^[А-Яа-я]+\s+\d{4}$', text.strip()):  # "Новосибирск 2025"
+                    title_page_type = 'city_year'
+                elif any(x in text for x in ['класс', 'округа', 'города Новосибирска']) or \
+                     (text and not text.startswith('**') and len(text) < 100):
+                    # Детали автора/руководителя
+                    if '**' in text:
+                        title_page_type = 'author_name_bold'
+                    else:
+                        title_page_type = 'author_detail'
+                
+                if title_page_type:
+                    para = doc.add_paragraph()
+                    
+                    if title_page_type in ['appendix', 'appendix_2']:
+                        # Правый верхний угол
+                        run = para.add_run(text)
+                        run.font.name = FONT_NAME
+                        run.font.size = Pt(FONT_SIZE)
+                        para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                        para.paragraph_format.space_after = Pt(0)
+                    
+                    elif title_page_type in ['conference_dept', 'conference_org', 'conference_name']:
+                        # Центр - информация о конференции
+                        run = para.add_run(text)
+                        run.font.name = FONT_NAME
+                        run.font.size = Pt(FONT_SIZE)
+                        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        para.paragraph_format.space_after = Pt(6)
+                    
+                    elif title_page_type == 'section':
+                        # Центр - секция
+                        run = para.add_run(text)
+                        run.font.name = FONT_NAME
+                        run.font.size = Pt(FONT_SIZE)
+                        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        para.paragraph_format.space_before = Pt(12)
+                        para.paragraph_format.space_after = Pt(12)
+                    
+                    elif title_page_type == 'topic':
+                        # Центр - тема (жирный, крупный шрифт)
+                        topic_text = re.sub(r'\*\*Тема:\s*', '', text).replace('**', '').strip()
+                        run = para.add_run(topic_text)
+                        run.font.name = FONT_NAME
+                        run.font.size = Pt(16)
+                        run.bold = True
+                        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        para.paragraph_format.space_before = Pt(12)
+                        para.paragraph_format.space_after = Pt(18)
+                    
+                    elif title_page_type in ['author_label', 'supervisor_label']:
+                        # Правая сторона - метка "Автор:" или "Научный руководитель:"
+                        run = para.add_run(text)
+                        run.font.name = FONT_NAME
+                        run.font.size = Pt(FONT_SIZE)
+                        para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                        para.paragraph_format.space_before = Pt(12) if title_page_type == 'author_label' else Pt(6)
+                        para.paragraph_format.space_after = Pt(3)
+                    
+                    elif title_page_type == 'author_name_bold':
+                        # Правая сторона - имя автора/руководителя (жирный)
+                        name_text = text.replace('**', '').replace(',', '').strip()
+                        run = para.add_run(name_text)
+                        run.font.name = FONT_NAME
+                        run.font.size = Pt(FONT_SIZE)
+                        run.bold = True
+                        para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                        para.paragraph_format.space_after = Pt(3)
+                    
+                    elif title_page_type == 'author_detail':
+                        # Правая сторона - детали (класс, школа, округ и т.д.)
+                        run = para.add_run(text)
+                        run.font.name = FONT_NAME
+                        run.font.size = Pt(FONT_SIZE)
+                        para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                        para.paragraph_format.space_after = Pt(3)
+                    
+                    elif title_page_type == 'phone':
+                        # Правая сторона - телефон
+                        run = para.add_run(text)
+                        run.font.name = FONT_NAME
+                        run.font.size = Pt(FONT_SIZE)
+                        para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                        para.paragraph_format.space_after = Pt(6)
+                    
+                    elif title_page_type == 'city_year':
+                        # Низ страницы по центру
+                        run = para.add_run(text)
+                        run.font.name = FONT_NAME
+                        run.font.size = Pt(FONT_SIZE)
+                        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        para.paragraph_format.space_before = Pt(24)
+                    
                     continue
                 elif text == 'Интеллектуальная система мониторинга и распознавания для умного дома':
                     # Описание титульного листа
@@ -403,6 +626,36 @@ def generate_doc_from_markdown(md_file, output_file):
             style = 'List Number 2' if indent_level > 0 else 'List Number'
             para = doc.add_paragraph(text, style=style)
             set_paragraph_formatting(para, alignment='left')
+        
+        elif elem_type == 'image':
+            image_path = element[1]
+            alt_text = element[2] if len(element) > 2 else ''
+            
+            # Определяем абсолютный путь к изображению
+            md_dir = os.path.dirname(md_file)
+            if os.path.isabs(image_path):
+                full_path = image_path
+            else:
+                # Относительный путь от markdown файла
+                full_path = os.path.join(md_dir, image_path)
+                # Если не найден, пробуем от корня проекта
+                if not os.path.exists(full_path):
+                    project_root = get_project_root()
+                    full_path = os.path.join(project_root, image_path)
+            
+            if os.path.exists(full_path):
+                para = doc.add_paragraph()
+                para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                run = para.add_run()
+                # Добавляем изображение с максимальной шириной 15 см
+                run.add_picture(full_path, width=Cm(15))
+                print(f"  Изображение: {alt_text or os.path.basename(image_path)} ({i+1}/{len(elements)})")
+            else:
+                print(f"  ⚠️  Изображение не найдено: {full_path}")
+                # Добавляем текст вместо изображения
+                para = doc.add_paragraph()
+                para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                add_formatted_paragraph(doc, f"[Изображение: {alt_text or image_path}]", alignment='center')
     
     # Сохраняем документ
     doc.save(output_file)

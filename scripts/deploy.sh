@@ -161,8 +161,9 @@ main() {
     # Настройка Docker на удаленном хосте (если нужно)
     if [ "${SETUP_DOCKER:-false}" = "true" ]; then
         echo -e "${YELLOW}🔧 Настройка Docker на удаленном хосте...${NC}"
-        scp $SSH_OPTS setup-host.sh "$REMOTE_USER@$REMOTE_HOST:$REMOTE_PATH/"
-        remote_exec "cd $REMOTE_PATH && chmod +x setup-host.sh && ./setup-host.sh"
+        remote_exec "mkdir -p $REMOTE_PATH/scripts"
+        scp $SSH_OPTS scripts/setup-host.sh "$REMOTE_USER@$REMOTE_HOST:$REMOTE_PATH/scripts/"
+        remote_exec "cd $REMOTE_PATH && chmod +x scripts/setup-host.sh && sudo scripts/setup-host.sh"
     fi
     
     # Сборка и запуск на удаленном хосте

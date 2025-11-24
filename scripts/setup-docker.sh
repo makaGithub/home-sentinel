@@ -14,7 +14,7 @@ echo ""
 
 # Проверка, что скрипт запущен от root или с sudo
 if [ "$EUID" -ne 0 ]; then 
-    echo -e "${YELLOW}⚠️  Скрипт требует прав root. Используйте: sudo ./setup-docker.sh${NC}"
+    echo -e "${YELLOW}⚠️  Скрипт требует прав root. Используйте: sudo ./scripts/setup-docker.sh${NC}"
     exit 1
 fi
 

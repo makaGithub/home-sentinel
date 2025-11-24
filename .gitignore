@@ -1,0 +1,56 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Docker
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Data directory (кэши, модели, данные)
+data/
+!data/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+tmp/
+temp/
+
+# Build artifacts (generated docs, presentations, etc.)
+build/
+
+# Generated HTML documentation (публикуется через GitHub Actions)
+# Но сохраняем структуру директорий
+docs/_build/*
+!docs/_build/.gitkeep
+!docs/_build/html/.gitkeep
+docs/_build/**/*
+!docs/_build/**/.gitkeep
+
+# YOLO model files in code directory (если есть)
+vision_bridge/*.pt
+
+# Директории cache и models не должны быть в коде (они в data/)
+vision_bridge/cache/
+vision_bridge/models/
+

@@ -20,13 +20,13 @@ docs/
 
 ```bash
 # Генерация всех форматов
-python contrib/generate_doc.py              # DOCX -> build/
-python contrib/generate_pptx.py             # PPTX -> build/
-python contrib/generate_html_presentation.py # HTML -> docs/_build/html/
+python scripts/generate_doc.py              # DOCX -> build/
+python scripts/generate_pptx.py             # PPTX -> build/
+python scripts/generate_html_presentation.py # HTML -> docs/_build/html/
 
 # Создание GitHub Release с DOCX/PPTX
-python contrib/generate_doc.py --release --version 1.0.0
-python contrib/generate_pptx.py --release --version 1.0.0
+python scripts/generate_doc.py --release --version 1.0.0
+python scripts/generate_pptx.py --release --version 1.0.0
 ```
 
 ### Автоматически (GitHub Actions)
@@ -66,11 +66,16 @@ HTML документация автоматически публикуется 
    gh auth login
    
    # Создайте Release
-   python contrib/generate_doc.py --release --version 1.0.0
-   python contrib/generate_pptx.py --release --version 1.0.0
+   python scripts/generate_doc.py --release --version 1.0.0
+   python scripts/generate_pptx.py --release --version 1.0.0
    ```
    
    **Примечание**: Если GitHub CLI не установлен, используйте GitHub Actions для создания Release (см. выше).
+
+## Требования и рекомендации
+
+- **Требования к формату**: [format_requirements.md](format_requirements.md)
+- **Рекомендации к написанию**: [project_guidelines.md](project_guidelines.md)
 
 ## Настройка
 

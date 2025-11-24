@@ -17,7 +17,7 @@ echo ""
 ###   ROOT CHECK
 ### ================================================================
 if [ "$EUID" -ne 0 ]; then
-    echo -e "${RED}❌ Запустите: sudo ./setup-host.sh${NC}"
+    echo -e "${RED}❌ Запустите: sudo ./scripts/setup-host.sh${NC}"
     exit 1
 fi
 

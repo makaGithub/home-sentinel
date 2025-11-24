@@ -7,7 +7,7 @@ on:
       - master
     paths:
       - 'docs/source/**'
-      - 'contrib/generate_*.py'
+      - 'scripts/generate_*.py'
   workflow_dispatch:
     inputs:
       publish_doc:
@@ -71,7 +71,7 @@ jobs:
           # Генерируем DOCX
           if [ "${{ github.event.inputs.publish_doc }}" != "false" ] && ([ -z "${{ github.event.inputs.publish_doc }}" ] || [ "${{ github.event.inputs.publish_doc }}" == "true" ]); then
             echo "📄 Генерация DOCX..."
-            python contrib/generate_doc.py || echo "Failed to generate DOCX"
+            python scripts/generate_doc.py || echo "Failed to generate DOCX"
             DOCX_FILE=$(find build -name "project_*.docx" -type f | head -n 1 || echo "")
             if [ -n "$DOCX_FILE" ]; then
               echo "docx_file=$DOCX_FILE" >> $GITHUB_OUTPUT
@@ -82,7 +82,7 @@ jobs:
           # Генерируем PPTX
           if [ "${{ github.event.inputs.publish_pptx }}" != "false" ] && ([ -z "${{ github.event.inputs.publish_pptx }}" ] || [ "${{ github.event.inputs.publish_pptx }}" == "true" ]); then
             echo "📊 Генерация PPTX..."
-            python contrib/generate_pptx.py || echo "Failed to generate PPTX"
+            python scripts/generate_pptx.py || echo "Failed to generate PPTX"
             PPTX_FILE=$(find build -name "presentation_*.pptx" -type f | head -n 1 || echo "")
             if [ -n "$PPTX_FILE" ]; then
               echo "pptx_file=$PPTX_FILE" >> $GITHUB_OUTPUT
@@ -93,7 +93,7 @@ jobs:
           # Генерируем HTML
           if [ "${{ github.event.inputs.publish_html }}" != "false" ] && ([ -z "${{ github.event.inputs.publish_html }}" ] || [ "${{ github.event.inputs.publish_html }}" == "true" ]); then
             echo "🌐 Генерация HTML..."
-            python contrib/generate_html_presentation.py || echo "Failed to generate HTML"
+            python scripts/generate_html_presentation.py || echo "Failed to generate HTML"
             HTML_FILE=$(find docs/_build/html -name "presentation_*.html" -type f | sort | tail -n 1 || echo "")
             if [ -n "$HTML_FILE" ]; then
               # Создаем index.html (всегда обновляем до последнего)

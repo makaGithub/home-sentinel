@@ -16,14 +16,25 @@ home-sentinel/
 │   ├── models/             # Модели InsightFace и YOLO
 │   └── .buildx-cache/      # Docker buildx кэш
 ├── docker-compose.yml      # Конфигурация Docker Compose
-├── setup-host.sh           # Скрипт настройки хоста
-└── deploy.sh               # Скрипт деплоя
+└── scripts/                # Вспомогательные скрипты
+    ├── deploy.sh           # Скрипт деплоя
+    ├── setup-host.sh       # Скрипт настройки хоста
+    └── generate_*.py       # Генераторы документации
 ```
 
 ### Компоненты
 
-- **code/** - сервис детекции объектов и распознавания лиц (YOLOv8 + InsightFace)
+- **code/** - сервис детекции объектов и распознавания лиц (YOLOv11 + InsightFace)
 - **data/** - все данные (кэши, модели, конфигурации) отдельно от кода
+
+### Реализованные функции
+
+- ✅ Детекция объектов в реальном времени (YOLOv11)
+- ✅ Распознавание лиц (InsightFace, интеграция с Immich)
+- ✅ Анализ аудио потоков (детекция звуков по громкости)
+- ✅ Статистика активности (запись в БД)
+- ✅ Интеграция с Immich (использование базы лиц)
+- ✅ Анти-дребезг для стабилизации детекции
 
 ## Требования
 
@@ -64,7 +75,7 @@ home-sentinel/
 
 2. **Настройте Docker и окружение:**
    ```bash
-   sudo ./setup-host.sh
+   sudo ./scripts/setup-host.sh
    ```
    
    Скрипт автоматически:
@@ -91,7 +102,7 @@ home-sentinel/
 
 2. **Деплой на удаленный хост:**
    ```bash
-   ./deploy.sh
+   ./scripts/deploy.sh
    ```
    
    Команда автоматически выполнит:
@@ -103,23 +114,23 @@ home-sentinel/
 3. **Быстрые команды:**
    ```bash
    # Только синхронизация кода
-   ./deploy.sh sync
+   ./scripts/deploy.sh sync
    
    # Только сборка
-   ./deploy.sh build
+   ./scripts/deploy.sh build
    
    # Только перезапуск
-   ./deploy.sh restart
+   ./scripts/deploy.sh restart
    
    # Просмотр логов
-   ./deploy.sh logs
-   ./deploy.sh logs yolov8  # логи конкретного сервиса
+   ./scripts/deploy.sh logs
+   ./scripts/deploy.sh logs yolov8  # логи конкретного сервиса
    
    # Статус сервисов
-   ./deploy.sh status
+   ./scripts/deploy.sh status
    
    # SSH подключение к хосту
-   ./deploy.sh ssh
+   ./scripts/deploy.sh ssh
    ```
 
 ### Методы синхронизации
@@ -164,14 +175,19 @@ nano .env
 
 После деплоя на удаленном хосте доступны следующие сервисы:
 
-- **yolov8-detector**: детекция объектов и лиц (YOLOv8 + InsightFace)
+- **home-sentinel**: детекция объектов и распознавание лиц (YOLOv11 + InsightFace)
+  - Обработка RTSP видеопотока
+  - Распознавание лиц с использованием базы из Immich
+  - Детекция объектов в реальном времени
+  - Анализ аудио потоков
+  - Запись статистики в PostgreSQL
 
 ## Troubleshooting
 
 ### Проблемы с деплоем
 
 **Ошибка "Unable to locate package docker-buildx-plugin":**
-- Это нормально для Ubuntu 24.04.3. Скрипт `setup-host.sh` автоматически установит buildx вручную, если пакет недоступен.
+- Это нормально для Ubuntu 24.04.3. Скрипт `scripts/setup-host.sh` автоматически установит buildx вручную, если пакет недоступен.
 
 **Проблемы с SSH подключением:**
 - Проверьте доступ: `ssh user@your-gpu-server.com`
@@ -180,7 +196,7 @@ nano .env
 ### Проблемы с Docker на удаленном хосте
 
 **Docker требует sudo:**
-- После выполнения `setup-host.sh` выйдите и войдите снова
+- После выполнения `scripts/setup-host.sh` выйдите и войдите снова
 - Или выполните: `newgrp docker`
 
 **Проверка статуса Docker:**
@@ -214,7 +230,7 @@ sudo systemctl restart docker
 
 ```bash
 # Через скрипт деплоя
-./deploy.sh logs
+./scripts/deploy.sh logs
 
 # Или напрямую через SSH
 ssh user@your-gpu-server.com 'cd /path/to/home-sentinel && docker compose logs -f'
