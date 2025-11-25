@@ -7,3 +7,5 @@ psycopg2-binary
 python-dotenv
 requests
 paho-mqtt
+tensorflow>=2.13.0,<2.16.0
+tensorflow-hub

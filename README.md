@@ -3,8 +3,7 @@ Home assistant AI stack с поддержкой GPU
 
 ## 📚 Документация
 
-- **📖 Онлайн документация**: [GitHub Pages](https://makaGithub.github.io/home-sentinel/)
-- **📦 Releases**: [GitHub Releases](https://github.com/makaGithub/home-sentinel/releases)
+Документация проекта находится в отдельном приватном репозитории.
 
 ## Структура проекта
 
@@ -18,8 +17,7 @@ home-sentinel/
 ├── docker-compose.yml      # Конфигурация Docker Compose
 └── scripts/                # Вспомогательные скрипты
     ├── deploy.sh           # Скрипт деплоя
-    ├── setup-host.sh       # Скрипт настройки хоста
-    └── generate_*.py       # Генераторы документации
+    └── setup-host.sh       # Скрипт настройки хоста
 ```
 
 ### Компоненты
