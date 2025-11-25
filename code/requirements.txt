@@ -1,0 +1,11 @@
+# --- Совместимые версии с CUDA 12.3 и ORT 1.18 ---
+numpy>=1.24,<2.0
+pillow
+opencv-python-headless
+ultralytics
+psycopg2-binary
+python-dotenv
+requests
+paho-mqtt
+tensorflow>=2.13.0,<2.16.0
+tensorflow-hub
