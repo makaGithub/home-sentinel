@@ -169,8 +169,8 @@ main() {
     # Сборка и запуск на удаленном хосте
     if [ "${BUILD_REMOTE:-false}" = "true" ]; then
         ensure_buildx_builder
-        echo -e "${YELLOW}🔨 Сборка Docker образов на удаленном хосте...${NC}"
-        remote_exec "cd $REMOTE_PATH && export DOCKER_BUILDKIT=1 && export COMPOSE_DOCKER_CLI_BUILD=1 && docker compose build"
+        echo -e "${YELLOW}🔨 Сборка Docker образов на удаленном хосте с использованием кэша...${NC}"
+        remote_exec "cd $REMOTE_PATH && export DOCKER_BUILDKIT=1 && export COMPOSE_DOCKER_CLI_BUILD=1 && docker compose build --progress=plain"
     fi
     
     # Убеждаемся, что директории созданы и исправлены перед запуском
@@ -209,7 +209,8 @@ case "${1:-}" in
         ;;
     build)
         ensure_buildx_builder
-        remote_exec "cd $REMOTE_PATH && export DOCKER_BUILDKIT=1 && export COMPOSE_DOCKER_CLI_BUILD=1 && docker compose build"
+        echo -e "${YELLOW}🔨 Сборка Docker образов с использованием кэша...${NC}"
+        remote_exec "cd $REMOTE_PATH && export DOCKER_BUILDKIT=1 && export COMPOSE_DOCKER_CLI_BUILD=1 && docker compose build --progress=plain"
         ;;
     restart)
         remote_exec "cd $REMOTE_PATH && docker compose restart"

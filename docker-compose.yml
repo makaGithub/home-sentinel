@@ -26,5 +26,25 @@ services:
       # Монтируем директории данных (они должны существовать на хосте ДО запуска)
       - ./data/cache:/app/cache
       - ./data/models:/app/models
+      - ./data/screenshots:/app/data/screenshots
     working_dir: /app/code
     command: ["python3.10", "main.py"]
+    networks:
+      - home-sentinel-net
+
+  screenshots-web:
+    image: nginx:alpine
+    container_name: screenshots-web
+    restart: unless-stopped
+    ports:
+      - "${SCREENSHOTS_WEB_PORT:-8080}:80"
+    volumes:
+      - ./data/screenshots:/screenshots:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/index.html:/usr/share/nginx/html/index.html:ro
+    networks:
+      - home-sentinel-net
+
+networks:
+  home-sentinel-net:
+    driver: bridge

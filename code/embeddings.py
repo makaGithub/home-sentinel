@@ -33,7 +33,7 @@ def load_or_refresh_cache(force_refresh: bool = False):
     )
 
     if cache_exists and not force_refresh:
-        log("📦 Загружаю векторные представления из кэша...")
+        log("📦 Загружаю векторные представления лиц из кэша Immich...")
         with open(embeddings_list_path, "r", encoding="utf-8") as f:
             embeddings_data = json.load(f)
 

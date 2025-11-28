@@ -21,6 +21,7 @@ def ensure_dirs():
     """Создаёт необходимые директории и настраивает INSIGHTFACE_ROOT."""
     os.makedirs(config.CACHE_DIR, exist_ok=True)
     os.makedirs(config.MODEL_DIR, exist_ok=True)
+    os.makedirs(config.SCREENSHOTS_DIR, exist_ok=True)
 
     # InsightFace ожидает root/models/antelopev2
     insight_root = os.path.dirname(config.MODEL_DIR) or "/app"

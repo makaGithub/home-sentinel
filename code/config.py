@@ -9,6 +9,7 @@ import os
 # Директории
 CACHE_DIR = "/app/cache"
 MODEL_DIR = "/app/models"
+SCREENSHOTS_DIR = os.getenv("SCREENSHOTS_DIR", "/app/data/screenshots")
 
 # Пути к файлам кэша (старый формат)
 EMBEDDINGS_PATH = os.path.join(CACHE_DIR, "embeddings.npy")

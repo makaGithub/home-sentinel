@@ -62,7 +62,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libopenblas-dev liblapack-dev libx11-dev libgtk-3-dev libpq-dev \
-    python3.10 python3-pip && \
+    python3.10 python3-pip \
+    fonts-dejavu-core fonts-liberation && \
     rm -rf /var/lib/apt/lists/*
 
 # --- 2. Копируем окружение и приложение ---
