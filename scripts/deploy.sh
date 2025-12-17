@@ -152,11 +152,8 @@ main() {
             ;;
     esac
     
-    # Копирование .env файла если нужно
-    if [ -f ".env" ] && [ "${COPY_ENV:-true}" = "true" ]; then
-        echo -e "${YELLOW}📋 Копирование .env файла...${NC}"
-        scp $SSH_OPTS .env "$REMOTE_USER@$REMOTE_HOST:$REMOTE_PATH/.env"
-    fi
+    # Копирование .env файла
+    copy_env
     
     # Настройка Docker на удаленном хосте (если нужно)
     if [ "${SETUP_DOCKER:-false}" = "true" ]; then
@@ -198,6 +195,15 @@ main() {
     echo "  ssh $REMOTE_USER@$REMOTE_HOST 'cd $REMOTE_PATH && docker compose logs -f'"
 }
 
+# Функция для копирования .env
+copy_env() {
+    if [ -f ".env" ] && [ "${COPY_ENV:-true}" = "true" ]; then
+        echo -e "${YELLOW}📋 Копирование .env файла...${NC}"
+        scp $SSH_OPTS .env "$REMOTE_USER@$REMOTE_HOST:$REMOTE_PATH/.env"
+        echo -e "${GREEN}✅ .env скопирован${NC}"
+    fi
+}
+
 # Обработка аргументов командной строки
 case "${1:-}" in
     sync)
@@ -206,6 +212,10 @@ case "${1:-}" in
         else
             sync_git
         fi
+        copy_env
+        ;;
+    env)
+        copy_env
         ;;
     build)
         ensure_buildx_builder

@@ -19,14 +19,22 @@ import time
 import warnings
 from datetime import datetime
 
+# Настройка количества CPU потоков (должно быть до импорта cv2/numpy)
+import config
+num_threads = config.CPU_THREADS
+os.environ["OPENCV_NUM_THREADS"] = str(num_threads)
+os.environ["OMP_NUM_THREADS"] = str(num_threads)
+os.environ["MKL_NUM_THREADS"] = str(num_threads)
+os.environ["NUMEXPR_NUM_THREADS"] = str(num_threads)
+
 import cv2
+cv2.setNumThreads(num_threads)
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-import config
 import stats
 # from audio_detector import AudioDetector  # Временно отключено
-from camera import open_camera
+from camera import open_camera_stream
 from embeddings import load_or_refresh_cache
 from models import init_face_analysis, init_yolo
 from utils import (
@@ -83,12 +91,23 @@ def draw_text_unicode(img, text, position, font_size=20, text_color=(255, 255, 2
     
     # Рисуем фон если указан
     if bg_color:
+        # Добавляем небольшой отступ
+        padding = 3
         draw.rectangle(
-            [(x, y - text_height - 5), (x + text_width, y + 5)],
-            fill=bg_color
+            [(x - padding, y - text_height - padding - 2), (x + text_width + padding, y + padding)],
+            fill=bg_color,
+            outline=(0, 0, 0),  # Чёрная обводка рамки
+            width=1
         )
+        
+        # Автоматический выбор цвета текста на основе яркости фона
+        # Формула яркости: 0.299*R + 0.587*G + 0.114*B
+        brightness = 0.299 * bg_color[0] + 0.587 * bg_color[1] + 0.114 * bg_color[2]
+        text_color = (0, 0, 0) if brightness > 128 else (255, 255, 255)
     
-    # Рисуем текст
+    # Рисуем текст с тенью для лучшей читаемости
+    shadow_color = (0, 0, 0) if text_color == (255, 255, 255) else (255, 255, 255)
+    draw.text((x + 1, y - text_height + 1), text, font=font, fill=shadow_color)  # Тень
     draw.text((x, y - text_height), text, font=font, fill=text_color)
     
     # Конвертируем обратно в OpenCV (BGR)
@@ -137,11 +156,13 @@ def recognize_objects_and_faces(
 ):
     ensure_dirs()
 
-    cap = open_camera()
-    if cap is None:
+    log(f"⚙️  CPU threads: {config.CPU_THREADS} (OpenCV: {cv2.getNumThreads()})")
+
+    stream = open_camera_stream()
+    if stream is None:
         time.sleep(5)
-        cap = open_camera()
-        if cap is None:
+        stream = open_camera_stream()
+        if stream is None:
             raise RuntimeError("🚫 Камера недоступна.")
 
     yolo = init_yolo()
@@ -157,6 +178,7 @@ def recognize_objects_and_faces(
     # Счетчик для уменьшения флуда логов при отсутствии кадров
     no_frame_count = 0
     last_no_frame_log = 0
+    last_stream_frame_id = -1
     
     # Словарь эмодзи для разных объектов
     object_emojis = {
@@ -178,34 +200,72 @@ def recognize_objects_and_faces(
     }
     
     # Цветовая палитра для разных типов объектов (BGR формат для OpenCV)
+    # Выбраны контрастные цвета для хорошей читаемости
     object_colors = {
-        "person": (255, 100, 0),      # Синий
-        "dog": (0, 255, 255),          # Желтый
-        "cat": (255, 165, 0),          # Оранжевый
-        "tv": (255, 0, 255),           # Пурпурный
-        "laptop": (255, 20, 147),      # Розовый
-        "cell phone": (0, 191, 255),   # Голубой
-        "chair": (34, 139, 34),        # Зеленый
-        "couch": (139, 0, 139),        # Темно-фиолетовый
-        "dining table": (0, 206, 209), # Бирюзовый
-        "bed": (255, 140, 0),          # Темно-оранжевый
-        "book": (255, 215, 0),         # Золотой
-        "cup": (255, 69, 0),           # Красно-оранжевый
-        "bottle": (0, 250, 154),       # Зелено-голубой
-        "keyboard": (138, 43, 226),    # Фиолетовый
-        "mouse": (255, 105, 180),      # Розово-красный
+        "person": (0, 120, 255),       # Оранжевый (яркий)
+        "dog": (0, 200, 0),            # Зелёный
+        "cat": (255, 100, 0),          # Синий
+        "tv": (255, 0, 150),           # Розово-фиолетовый
+        "laptop": (200, 0, 200),       # Пурпурный
+        "cell phone": (255, 150, 0),   # Голубой
+        "chair": (0, 150, 0),          # Тёмно-зелёный
+        "couch": (150, 0, 150),        # Фиолетовый
+        "dining table": (200, 150, 0), # Бирюзовый
+        "bed": (0, 100, 200),          # Коричнево-оранжевый
+        "book": (0, 180, 180),         # Жёлто-зелёный
+        "cup": (50, 50, 200),          # Красный
+        "bottle": (150, 100, 0),       # Тёмно-синий
+        "keyboard": (150, 0, 100),     # Тёмно-фиолетовый
+        "mouse": (100, 50, 150),       # Бордовый
     }
 
     while True:
-        ret, img = cap.read()
-        if not ret:
-            no_frame_count += 1
-            # Логируем только каждые 10 попыток или при первой попытке
-            if no_frame_count == 1 or (no_frame_count % 10 == 0 and time.time() - last_no_frame_log > 5):
-                log(f"⚠️ Кадр не получен — пробую ещё... (попытка {no_frame_count})")
-                last_no_frame_log = time.time()
-            time.sleep(0.2)
+        if stream is None:
+            log("🔄 Камера недоступна, пробую подключиться...")
+            time.sleep(5)
+            stream = open_camera_stream()
             continue
+
+        img, stream_frame_id, last_ok_ts = stream.get_latest()
+        now = time.time()
+
+        # Если нет новых кадров — ждём. Если поток “застрял” (давно не было успешных read) — считаем как no-frame.
+        if img is None or stream_frame_id == last_stream_frame_id:
+            if last_ok_ts == 0.0 or (now - last_ok_ts) > config.STREAM_STALE_SEC:
+                no_frame_count += 1
+                if no_frame_count == 1 or (no_frame_count % 10 == 0 and now - last_no_frame_log > 5):
+                    log(f"⚠️ Кадр не обновляется — пробую ещё... (попытка {no_frame_count})")
+                    last_no_frame_log = now
+
+                if no_frame_count >= config.STREAM_RECONNECT_ATTEMPTS:
+                    log(f"🔄 Переподключение к видеопотоку после {no_frame_count} неудачных попыток...")
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
+                    stream = None
+                    time.sleep(config.STREAM_RECONNECT_DELAY)
+
+                    for attempt in range(3):
+                        stream = open_camera_stream()
+                        if stream is not None:
+                            no_frame_count = 0
+                            last_stream_frame_id = -1
+                            log("✅ Переподключение выполнено")
+                            break
+                        log(f"❌ Попытка переподключения {attempt + 1}/3 не удалась, жду...")
+                        time.sleep(5 * (attempt + 1))
+                    else:
+                        log("⚠️ Все попытки переподключения не удались, продолжаю пытаться...")
+                        no_frame_count = 0
+                        time.sleep(10)
+                    continue
+
+            time.sleep(0.05)
+            continue
+
+        # Новый кадр
+        last_stream_frame_id = stream_frame_id
 
         # Если кадр получен успешно, сбрасываем счетчик
         if no_frame_count > 0:
@@ -214,7 +274,13 @@ def recognize_objects_and_faces(
             no_frame_count = 0
 
         frame += 1
-        results = yolo.predict(img, verbose=False)
+        # Используем настроенный размер изображения для обработки
+        results = yolo.predict(
+            img,
+            imgsz=config.YOLO_IMGSZ,
+            half=config.YOLO_FP16,
+            verbose=False,
+        )
         seen: dict[str, bool] = {}
 
         # ---------------- YOLO ----------------
@@ -227,6 +293,15 @@ def recognize_objects_and_faces(
 
             for (x1, y1, x2, y2), cls, conf in zip(boxes, classes, confidences):
                 label = yolo.names.get(cls, str(cls))
+                
+                # Пропускаем игнорируемые классы
+                if label in config.YOLO_IGNORE_CLASSES:
+                    continue
+                
+                # Фильтрация по минимальному confidence (разные пороги для person и остальных)
+                threshold = config.YOLO_PERSON_CONFIDENCE if label == "person" else config.YOLO_CONFIDENCE_THRESHOLD
+                if conf < threshold:
+                    continue
                 
                 # Сохраняем информацию об объекте для логирования
                 emoji = object_emojis.get(label, "📦")
@@ -353,6 +428,20 @@ def recognize_objects_and_faces(
                     for nm in recognized_names:
                         seen[f"person({nm})"] = True
 
+                    # ВАЖНО: переносим состояние анти-дребезга с "person" на "person(Имя)",
+                    # чтобы имя сразу попадало в current/лог (а не спустя десятки кадров).
+                    if "person" in tracked:
+                        base_state = tracked.pop("person")
+                        base_last = int(base_state.get("last", 0))
+                        base_stable = int(base_state.get("stable", 1))
+                        for nm in recognized_names:
+                            key = f"person({nm})"
+                            if key not in tracked:
+                                tracked[key] = {"last": base_last, "stable": base_stable}
+                            else:
+                                tracked[key]["last"] = min(int(tracked[key].get("last", 0)), base_last)
+                                tracked[key]["stable"] = max(int(tracked[key].get("stable", 1)), base_stable)
+
                 # периодическая чистка кэша
                 if frame % 100 == 0:
                     face_cache = {
@@ -360,24 +449,36 @@ def recognize_objects_and_faces(
                     }
 
         # ---------------- Анти-дребезг ----------------
+        # Разные параметры для важных объектов (person, dog, cat) и остальных
+        def get_debounce_params(label: str):
+            """Возвращает (max_missing, min_stable) для объекта."""
+            base = label.split("(", 1)[0] if "(" in label else label
+            if base in config.IMPORTANT_OBJECTS:
+                return config.MAX_MISSING, config.MIN_STABLE
+            return config.MAX_MISSING_OTHER, config.MIN_STABLE_OTHER
+        
         for lbl in list(tracked.keys()):
+            max_missing, min_stable = get_debounce_params(lbl)
             if lbl not in seen:
                 tracked[lbl]["last"] += 1
-                if tracked[lbl]["last"] > config.MAX_MISSING // 2:
+                if tracked[lbl]["last"] > max_missing // 2:
                     tracked[lbl]["stable"] = max(0, tracked[lbl]["stable"] - 1)
-                if tracked[lbl]["last"] > config.MAX_MISSING:
+                if tracked[lbl]["last"] > max_missing:
                     tracked.pop(lbl)
             else:
                 tracked[lbl]["last"] = 0
                 tracked[lbl]["stable"] = min(
-                    tracked[lbl]["stable"] + 1, config.MIN_STABLE
+                    tracked[lbl]["stable"] + 1, min_stable
                 )
 
         for lbl in seen:
             if lbl not in tracked:
                 tracked[lbl] = {"last": 0, "stable": 1}
 
-        current = {l for l, v in tracked.items() if v["stable"] >= config.MIN_STABLE}
+        current = {
+            lbl for lbl, v in tracked.items() 
+            if v["stable"] >= get_debounce_params(lbl)[1]
+        }
 
         if current != last_reported:
             added = current - last_reported
@@ -419,8 +520,11 @@ def recognize_objects_and_faces(
                     # Цвет для разных типов объектов из палитры
                     color = object_colors.get(label, (255, 0, 0))  # По умолчанию красный
                     
-                    # Рисуем прямоугольник с более толстой линией для person
+                    # Рисуем прямоугольник с обводкой для контрастности
                     line_width = 3 if label == "person" else 2
+                    # Сначала чёрная обводка (толще)
+                    cv2.rectangle(img_with_boxes, (x1, y1), (x2, y2), (0, 0, 0), line_width + 2)
+                    # Затем цветная рамка
                     cv2.rectangle(img_with_boxes, (x1, y1), (x2, y2), color, line_width)
                     
                     # Текст с label и confidence (с поддержкой Unicode)
@@ -457,14 +561,15 @@ def recognize_objects_and_faces(
                         emoji = object_emojis.get(label.split("(")[0] if "(" in label else label, "📦")
                         log(f"   {emoji} {label}")
                 
-                # Сохраняем скриншот
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                screenshot_path = os.path.join(
-                    config.SCREENSHOTS_DIR,
-                    f"frame_{frame}_{timestamp}.jpg"
-                )
-                cv2.imwrite(screenshot_path, img_with_boxes)
-                log(f"💾 Скриншот сохранен: {screenshot_path}")
+                # Сохраняем скриншот (если включено)
+                if config.SCREENSHOTS_ENABLED:
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    screenshot_path = os.path.join(
+                        config.SCREENSHOTS_DIR,
+                        f"frame_{timestamp}_{frame}.jpg"
+                    )
+                    cv2.imwrite(screenshot_path, img_with_boxes)
+                    log(f"💾 Скриншот сохранен: {screenshot_path}")
 
             if added:
                 log(f"➕ Появились: {', '.join(sorted(added))}")

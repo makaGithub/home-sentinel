@@ -57,10 +57,12 @@ def init_yolo():
     if config.YOLO_FORCE_GPU:
         try:
             model.to("cuda")
+            # FP16 включаем на стадии predict() (Ultralytics сначала fuse() в FP32)
             log("✅ YOLO GPU.")
         except Exception as e:
             log(f"⚠️ YOLO GPU не удалось ({e}), CPU...")
             model.to("cpu")
+            log("YOLO CPU.")
     else:
         model.to("cpu")
         log("YOLO CPU.")
