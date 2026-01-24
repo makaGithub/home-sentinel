@@ -18,6 +18,9 @@ services:
               capabilities: [gpu]
     env_file:
       - .env
+    environment:
+      # Отключаем CUDA баннер при старте контейнера
+      - NVIDIA_DISABLE_REQUIRE=1
     volumes:
       # Монтируем код в /app/code (чтобы избежать конфликтов с cache и models)
       - ./code:/app/code
@@ -40,6 +43,21 @@ services:
       - ./data/screenshots:/screenshots:ro
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/index.html:/usr/share/nginx/html/index.html:ro
+    networks:
+      - home-sentinel-net
+
+  # NFS сервер для доступа к скриншотам из Home Assistant
+  screenshots-nfs:
+    image: itsthenetwork/nfs-server-alpine:latest
+    container_name: screenshots-nfs
+    restart: unless-stopped
+    privileged: true
+    environment:
+      - SHARED_DIRECTORY=/screenshots
+    volumes:
+      - ./data/screenshots:/screenshots:ro
+    ports:
+      - "${NFS_PORT:-2049}:2049"
     networks:
       - home-sentinel-net
 

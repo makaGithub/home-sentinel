@@ -44,7 +44,6 @@ def init_tables():
         conn.commit()
         cur.close()
         conn.close()
-        log("🗂 Таблицы person_stats и sound_stats инициализированы.")
     except Exception as e:
         log(f"⚠️ Ошибка инициализации таблиц статистики: {e}")
 

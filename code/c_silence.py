@@ -7,6 +7,10 @@
 import os
 import sys
 
+# Подавляем вывод Ultralytics (YOLO) - должно быть ДО импорта
+os.environ["YOLO_VERBOSE"] = "False"
+os.environ["ULTRALYTICS_SETTINGS"] = "False"
+
 try:
     devnull_fd = os.open(os.devnull, os.O_WRONLY)
 

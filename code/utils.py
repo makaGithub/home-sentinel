@@ -4,6 +4,7 @@
 """
 
 import os
+import shutil
 from datetime import datetime
 
 import cv2
@@ -17,6 +18,68 @@ def log(msg: str):
     print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {msg}", flush=True)
 
 
+def fix_insightface_model_structure():
+    """Исправляет неправильную структуру папок модели InsightFace.
+    Проблема: архив antelopev2.zip содержит вложенную папку antelopev2,
+    что приводит к структуре models/antelopev2/antelopev2 вместо models/antelopev2.
+    Эта функция проверяет и исправляет такую структуру.
+    """
+    model_name = config.INSIGHTFACE_MODEL
+    model_path = os.path.join(config.MODEL_DIR, model_name)
+    nested_path = os.path.join(model_path, model_name)
+    
+    # Проверяем наличие неправильной структуры
+    if not os.path.exists(nested_path) or not os.path.isdir(nested_path):
+        return  # Структура правильная, ничего не делаем
+    
+    log(f"🔧 Обнаружена неправильная структура: {nested_path}")
+    log(f"   Перемещаю файлы в {model_path}")
+    
+    try:
+        # Сначала проверяем, есть ли файлы модели в правильном месте
+        # Если в правильном месте уже есть файлы, удаляем вложенную папку
+        correct_files = [f for f in os.listdir(model_path) if f != model_name]
+        nested_files = os.listdir(nested_path)
+        
+        if correct_files:
+            # В правильном месте уже есть файлы, просто удаляем вложенную папку
+            log(f"   В правильном месте уже есть файлы, удаляю вложенную папку")
+            shutil.rmtree(nested_path)
+            log(f"✅ Вложенная папка удалена")
+            return
+        
+        # Перемещаем все файлы из вложенной папки в родительскую
+        moved_count = 0
+        for item in nested_files:
+            src = os.path.join(nested_path, item)
+            dst = os.path.join(model_path, item)
+            
+            # Если файл/папка уже существует, удаляем старый и перемещаем новый
+            if os.path.exists(dst):
+                if os.path.isdir(dst):
+                    shutil.rmtree(dst)
+                else:
+                    os.remove(dst)
+            
+            shutil.move(src, dst)
+            moved_count += 1
+        
+        # Удаляем пустую вложенную папку
+        try:
+            os.rmdir(nested_path)
+            log(f"   ✓ Удалена пустая вложенная папка")
+        except OSError:
+            # Если папка не пуста, удаляем рекурсивно
+            shutil.rmtree(nested_path)
+            log(f"   ✓ Удалена вложенная папка (рекурсивно)")
+        
+        log(f"✅ Структура модели исправлена (перемещено {moved_count} элементов)")
+    except Exception as e:
+        log(f"⚠️ Ошибка при исправлении структуры: {e}")
+        import traceback
+        log(f"   Traceback: {traceback.format_exc()}")
+
+
 def ensure_dirs():
     """Создаёт необходимые директории и настраивает INSIGHTFACE_ROOT."""
     os.makedirs(config.CACHE_DIR, exist_ok=True)
@@ -28,6 +91,9 @@ def ensure_dirs():
     if insight_root.endswith("/models"):
         insight_root = os.path.dirname(insight_root)
     os.environ["INSIGHTFACE_ROOT"] = insight_root
+    
+    # Исправляем неправильную структуру папок модели, если она есть
+    fix_insightface_model_structure()
 
 
 def _l2_normalize(v: np.ndarray, eps: float = 1e-9) -> np.ndarray:

@@ -8,7 +8,7 @@ main.py — модульный home-sentinel для Immich.
 - Анти-дребезг
 - Лог "кто в кадре"
 - Запись статистики по людям
-- Запуск простого аудиодетектора с RTSP (AudioDetector) и запись статистики по звукам (временно отключено)
+- Запуск аудиодетектора с RTSP (AudioDetector) и запись статистики по звукам
 """
 
 # Первым глушим C-level stdout/stderr
@@ -33,10 +33,16 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 import stats
-# from audio_detector import AudioDetector  # Временно отключено
+
+from audio_detector import AudioDetector
 from camera import open_camera_stream
 from embeddings import load_or_refresh_cache
 from models import init_face_analysis, init_yolo
+from mqtt_client import (
+    init_mqtt, send_face_recognized, send_person_arrived, send_person_left,
+    update_person_detected
+)
+from presence_tracker import init_presence_tracker, get_tracker
 from utils import (
     adaptive_threshold,
     ensure_dirs,
@@ -150,23 +156,16 @@ def compute_face_similarity(
 # 🔁 Главный цикл: видео, объекты, лица, статистика
 # ============================================================
 def recognize_objects_and_faces(
+    stream,
+    yolo,
+    face_app,
     all_embeddings_list: list,
     names: list,
     all_confidences_list: list,
+    audio_detector=None,
 ):
     ensure_dirs()
-
-    log(f"⚙️  CPU threads: {config.CPU_THREADS} (OpenCV: {cv2.getNumThreads()})")
-
-    stream = open_camera_stream()
-    if stream is None:
-        time.sleep(5)
-        stream = open_camera_stream()
-        if stream is None:
-            raise RuntimeError("🚫 Камера недоступна.")
-
-    yolo = init_yolo()
-    face_app = init_face_analysis()
+    log("🎬 Запуск обработки видеопотока...")
 
     tracked: dict[str, dict[str, int]] = {}
     last_reported: set[str] = set()
@@ -179,6 +178,8 @@ def recognize_objects_and_faces(
     no_frame_count = 0
     last_no_frame_log = 0
     last_stream_frame_id = -1
+    first_frame_processed = False
+    warmup_times = []  # Для накопления времени прогрева
     
     # Словарь эмодзи для разных объектов
     object_emojis = {
@@ -238,7 +239,7 @@ def recognize_objects_and_faces(
                     last_no_frame_log = now
 
                 if no_frame_count >= config.STREAM_RECONNECT_ATTEMPTS:
-                    log(f"🔄 Переподключение к видеопотоку после {no_frame_count} неудачных попыток...")
+                    log(f"🔄 Переподключение к удаленному видеопотоку после {no_frame_count} неудачных попыток...")
                     try:
                         stream.close()
                     except Exception:
@@ -274,6 +275,23 @@ def recognize_objects_and_faces(
             no_frame_count = 0
 
         frame += 1
+        
+        # Обновляем номер кадра для аудиодетектора
+        if audio_detector:
+            audio_detector.set_frame(frame)
+        
+        frame_start_time = time.time()
+        
+        # Лог о первом обработанном кадре
+        if not first_frame_processed:
+            log("✅ Первый кадр получен")
+            log("✅ Инициализация завершена, система работает")
+            log("🔥 Прогрев нейросетей (первые кадры обрабатываются медленнее)...")
+            first_frame_processed = True
+        
+        # Замер времени YOLO
+        yolo_start = time.time()
+        
         # Используем настроенный размер изображения для обработки
         results = yolo.predict(
             img,
@@ -281,7 +299,10 @@ def recognize_objects_and_faces(
             half=config.YOLO_FP16,
             verbose=False,
         )
+        
+        yolo_time = time.time() - yolo_start
         seen: dict[str, bool] = {}
+        face_time = 0.0  # Счётчик времени на распознавание лиц
 
         # ---------------- YOLO ----------------
         detected_objects = []  # Список для логирования
@@ -355,7 +376,9 @@ def recognize_objects_and_faces(
                 crop = preprocess_face_crop(crop)
 
                 try:
+                    face_start = time.time()
                     faces = face_app.get(crop, max_num=config.MAX_FACES_PER_CROP)
+                    face_time += time.time() - face_start
                 except Exception:
                     faces = []
 
@@ -474,6 +497,9 @@ def recognize_objects_and_faces(
         for lbl in seen:
             if lbl not in tracked:
                 tracked[lbl] = {"last": 0, "stable": 1}
+                # Лог о первом обнаружении объекта (до стабилизации)
+                if frame <= 20:  # Только в начале работы
+                    log(f"👁️ Кадр {frame}: обнаружен {lbl} (стабилизация...)")
 
         current = {
             lbl for lbl, v in tracked.items() 
@@ -483,16 +509,66 @@ def recognize_objects_and_faces(
         if current != last_reported:
             added = current - last_reported
             removed = last_reported - current
+            
+            # Подсчитываем количество person в текущем кадре
+            person_count = sum(1 for c in current if c == "person" or c.startswith("person("))
+            
+            # Обновляем статус "человек в кадре" в Home Assistant
+            update_person_detected(person_count > 0)
+            
+            # Списки для логирования
+            faces_recognized = []  # Лица, которые распознаны
+            truly_added = []       # Объекты, которые реально появились
+            truly_removed = []     # Объекты, которые реально ушли
+            
+            # Обрабатываем added
+            for a in added:
+                if a.startswith("person("):
+                    # Лицо распознано
+                    name = a[7:-1]  # Извлекаем имя из "person(Имя)"
+                    # Если был просто person, это распознание лица, а не появление нового человека
+                    if "person" in removed:
+                        faces_recognized.append(name)
+                    else:
+                        # Новый человек сразу распознан
+                        faces_recognized.append(name)
+                elif a == "person":
+                    # Новый person появился
+                    # Не логируем если одновременно появился person(Имя) — это дубликат
+                    named_added = any(x.startswith("person(") for x in added)
+                    if not named_added:
+                        truly_added.append(a)
+                else:
+                    truly_added.append(a)
+            
+            # Обрабатываем removed
+            for r in removed:
+                if r.startswith("person("):
+                    # Лицо пропало
+                    # Логируем только если person тоже пропал (человек ушёл)
+                    # Если person остался или появился — лицо просто перестало распознаваться
+                    person_still_here = "person" in current or "person" in added
+                    if not person_still_here:
+                        truly_removed.append(r)
+                elif r == "person":
+                    # person пропал
+                    # Не логируем если появился person(Имя) — это распознание лица
+                    named_added = any(x.startswith("person(") for x in added)
+                    if not named_added:
+                        truly_removed.append(r)
+                else:
+                    truly_removed.append(r)
 
-            if added or removed:
-                # Логируем детали объектов только при изменениях
+            # Логируем только значимые изменения
+            has_changes = faces_recognized or truly_added or truly_removed
+            if has_changes:
+                # Логируем детали кадра
                 log(f"📸 Кадр {frame}: Обнаружены объекты:")
                 
-                # Создаем словарь для быстрого поиска объектов по label
+                # Создаем словарь объектов по label для логирования
                 objects_by_label = {}
                 for obj in detected_objects:
                     label = obj["label"]
-                    # Если person был распознан с именем, используем его
                     for seen_label in seen.keys():
                         if seen_label.startswith("person(") and label == "person":
                             label = seen_label
@@ -500,54 +576,7 @@ def recognize_objects_and_faces(
                     if label not in objects_by_label or obj["confidence"] > objects_by_label[label]["confidence"]:
                         objects_by_label[label] = obj
                 
-                # Создаем копию изображения для отрисовки
-                img_with_boxes = img.copy()
-                
-                # Отрисовываем все обнаруженные объекты
-                for obj in detected_objects:
-                    label = obj["label"]
-                    # Если person был распознан с именем, используем его
-                    display_label = label
-                    for seen_label in seen.keys():
-                        if seen_label.startswith("person(") and label == "person":
-                            display_label = seen_label
-                            break
-                    
-                    # Отрисовываем bounding box
-                    x1, y1 = obj['x'], obj['y']
-                    x2, y2 = x1 + obj['w'], y1 + obj['h']
-                    
-                    # Цвет для разных типов объектов из палитры
-                    color = object_colors.get(label, (255, 0, 0))  # По умолчанию красный
-                    
-                    # Рисуем прямоугольник с обводкой для контрастности
-                    line_width = 3 if label == "person" else 2
-                    # Сначала чёрная обводка (толще)
-                    cv2.rectangle(img_with_boxes, (x1, y1), (x2, y2), (0, 0, 0), line_width + 2)
-                    # Затем цветная рамка
-                    cv2.rectangle(img_with_boxes, (x1, y1), (x2, y2), color, line_width)
-                    
-                    # Текст с label и confidence (с поддержкой Unicode)
-                    label_text = f"{display_label} {obj['confidence']:.2f}"
-                    
-                    # Конвертируем BGR color в RGB для PIL
-                    bg_color_rgb = (color[2], color[1], color[0])  # BGR -> RGB
-                    
-                    # Размер шрифта и цвет текста
-                    font_size = 18 if label == "person" else 16
-                    text_color = (255, 255, 255)  # Белый текст для лучшей читаемости
-                    
-                    # Отрисовываем текст с поддержкой Unicode
-                    img_with_boxes = draw_text_unicode(
-                        img_with_boxes,
-                        label_text,
-                        (x1, y1),
-                        font_size=font_size,
-                        text_color=text_color,
-                        bg_color=bg_color_rgb
-                    )
-                
-                # Логируем только объекты, которые есть в current
+                # Логируем объекты
                 for label in sorted(current):
                     if label in objects_by_label:
                         obj = objects_by_label[label]
@@ -557,47 +586,137 @@ def recognize_objects_and_faces(
                             f"[x: {obj['x']}, y: {obj['y']}, w: {obj['w']}, h: {obj['h']}]"
                         )
                     else:
-                        # Если объекта нет в detected_objects (например, person с именем), используем эмодзи по умолчанию
                         emoji = object_emojis.get(label.split("(")[0] if "(" in label else label, "📦")
                         log(f"   {emoji} {label}")
                 
-                # Сохраняем скриншот (если включено)
-                if config.SCREENSHOTS_ENABLED:
+                # Сохраняем скриншот только при распознании лиц (если включено)
+                current_screenshot_path = None
+                if config.SCREENSHOTS_ENABLED and faces_recognized:
+                    img_with_boxes = img.copy()
+                    for obj in detected_objects:
+                        label = obj["label"]
+                        display_label = label
+                        for seen_label in seen.keys():
+                            if seen_label.startswith("person(") and label == "person":
+                                display_label = seen_label
+                                break
+                        
+                        x1, y1 = obj['x'], obj['y']
+                        x2, y2 = x1 + obj['w'], y1 + obj['h']
+                        color = object_colors.get(label, (255, 0, 0))
+                        line_width = 3 if label == "person" else 2
+                        cv2.rectangle(img_with_boxes, (x1, y1), (x2, y2), (0, 0, 0), line_width + 2)
+                        cv2.rectangle(img_with_boxes, (x1, y1), (x2, y2), color, line_width)
+                        
+                        label_text = f"{display_label} {obj['confidence']:.2f}"
+                        bg_color_rgb = (color[2], color[1], color[0])
+                        font_size = 18 if label == "person" else 16
+                        text_color = (255, 255, 255)
+                        img_with_boxes = draw_text_unicode(
+                            img_with_boxes, label_text, (x1, y1),
+                            font_size=font_size, text_color=text_color, bg_color=bg_color_rgb
+                        )
+                    
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    screenshot_path = os.path.join(
+                    current_screenshot_path = os.path.join(
                         config.SCREENSHOTS_DIR,
                         f"frame_{timestamp}_{frame}.jpg"
                     )
-                    cv2.imwrite(screenshot_path, img_with_boxes)
-                    log(f"💾 Скриншот сохранен: {screenshot_path}")
+                    cv2.imwrite(current_screenshot_path, img_with_boxes)
+                    log(f"💾 Скриншот сохранен: {current_screenshot_path}")
 
-            if added:
-                log(f"➕ Появились: {', '.join(sorted(added))}")
-            if removed:
-                log(f"➖ Ушли: {', '.join(sorted(removed))}")
-
-            log(
-                f"📸 Сейчас в кадре: {', '.join(sorted(current)) or 'никого'}"
-            )
+                # Логируем появления (не-person объекты)
+                if truly_added:
+                    log(f"➕ Появились: {', '.join(sorted(truly_added))}")
+                
+                # Логируем распознанные лица и отправляем в MQTT
+                for name in faces_recognized:
+                    log(f"👤 Распознано лицо на кадре: {name}")
+                    # Формируем URL скриншота для MQTT image entity
+                    screenshot_url = None
+                    if current_screenshot_path and config.SCREENSHOTS_WEB_URL:
+                        filename = os.path.basename(current_screenshot_path)
+                        screenshot_url = f"{config.SCREENSHOTS_WEB_URL.rstrip('/')}/screenshots/{filename}"
+                    send_face_recognized(name, frame=frame, screenshot_url=screenshot_url)
+                    # Уведомляем трекер присутствия (с путём к скриншоту)
+                    tracker = get_tracker()
+                    if tracker:
+                        tracker.on_face_recognized(name, current_screenshot_path)
+                
+                # Логируем уходы
+                if truly_removed:
+                    log(f"➖ Ушли: {', '.join(sorted(truly_removed))}")
 
             last_reported = current
+        
+        # Диагностика времени обработки для первых кадров (прогрев)
+        if frame <= 15:
+            frame_time = time.time() - frame_start_time
+            # Формируем компактную строку для кадра
+            if face_time > 0.01:
+                warmup_times.append(f"{frame}:{frame_time:.2f}с")
+            else:
+                warmup_times.append(f"{frame}:{frame_time:.2f}с")
+            
+            # Выводим по 5 кадров на строку
+            if frame % 5 == 0 or frame == 15:
+                log(f"   ⏱️ Кадры {', '.join(warmup_times)}")
+                warmup_times.clear()
+        elif frame == 16:
+            log("✅ Прогрев завершён, система работает в штатном режиме")
 
 
 # ============================================================
 # 🚀 MAIN
 # ============================================================
 if __name__ == "__main__":
-    log("🚀 home-sentinel (RTSP video) стартует")
+    log("🚀 home-sentinel стартует")
 
-    # Инициализация таблиц статистики
-    stats.init_tables()
+    try:
+        # Инициализация таблиц статистики
+        stats.init_tables()
 
-    # Запускаем аудио-детектор в фоне (простая заглушка по громкости)
-    # audio = AudioDetector()  # Временно отключено
-    # audio.start()  # Временно отключено
+        # 1. Подключаемся к видеопотоку
+        stream = open_camera_stream()
+        if stream is None:
+            time.sleep(5)
+            stream = open_camera_stream()
+            if stream is None:
+                raise RuntimeError("Камера недоступна")
 
-    # Загружаем векторные представления Immich
-    all_embeddings_list, names, ids, all_confidences_list = load_or_refresh_cache()
+        # 2. Запускаем аудио-детектор в фоне (детекция начнётся после инициализации)
+        audio = None
+        if config.YAMNET_CLASSES:
+            audio = AudioDetector()
+            audio.start()
+
+        # 3. Инициализация моделей
+        yolo = init_yolo()
+        face_app = init_face_analysis()
+
+        # 4. Загружаем векторные представления лиц из Immich
+        all_embeddings_list, names, ids, all_confidences_list = load_or_refresh_cache()
+
+        # 5. Подключаемся к MQTT для интеграции с Home Assistant
+        init_mqtt()
+        
+        # 6. Инициализируем трекер присутствия (пришёл/ушёл)
+        tracker = init_presence_tracker()
+        if tracker:
+            tracker.set_callbacks(
+                on_arrived=send_person_arrived,
+                on_left=send_person_left
+            )
+
+    except Exception as e:
+        log(f"🚫 Критическая ошибка инициализации: {e}")
+        import traceback
+        traceback.print_exc()
+        raise SystemExit(1)
+
+    # Разрешаем детекцию звуков
+    if audio:
+        audio.enable()
 
     # Запускаем основной цикл видео
-    recognize_objects_and_faces(all_embeddings_list, names, all_confidences_list)
+    recognize_objects_and_faces(stream, yolo, face_app, all_embeddings_list, names, all_confidences_list, audio)

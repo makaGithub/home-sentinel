@@ -87,14 +87,51 @@ FACE_TRACKING_FRAMES = int(os.getenv("FACE_TRACKING_FRAMES", "5"))        # ка
 # Настройки кэша лиц
 FACE_CACHE_VALIDITY_FRAMES = 30  # кэш действителен N кадров
 
-# список звуков по которым вести статистику (структура ЗАРАНЕЕ)
-SOUNDS_TO_TRACK = [
-    "speech",
-    "dog_bark",
-]
+# Классы YAMNet для детекции (из .env, через запятую)
+# Полный список: https://github.com/tensorflow/models/blob/master/research/audioset/yamnet/yamnet_class_map.csv
+_yamnet_str = os.getenv("YAMNET_CLASSES", "Speech,Dog,Bark")
+YAMNET_CLASSES = [s.strip().lower() for s in _yamnet_str.split(",") if s.strip()]
 
 # Аудио с камеры приведём к этому sample rate
 AUDIO_SAMPLE_RATE = 16000
 
 # Количество CPU потоков для обработки
 CPU_THREADS = int(os.getenv("CPU_THREADS", "4"))  # количество ядер CPU для использования
+
+# ============================================
+# MQTT (интеграция с Home Assistant)
+# ============================================
+MQTT_BROKER = os.getenv("MQTT_BROKER", "")  # пустой = MQTT отключен
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_TOPIC = os.getenv("MQTT_TOPIC", "home-sentinel/events")
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
+MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "home-sentinel")
+
+# Имя устройства в Home Assistant
+MQTT_DEVICE_NAME = os.getenv("MQTT_DEVICE_NAME", "Страж дома")
+MQTT_DEVICE_ID = os.getenv("MQTT_DEVICE_ID", "home_sentinel")
+
+# Минимальный интервал между отправкой одинаковых событий (секунды)
+MQTT_EVENT_COOLDOWN = float(os.getenv("MQTT_EVENT_COOLDOWN", "5.0"))
+
+# ============================================
+# Трекер присутствия (пришёл/ушёл)
+# ============================================
+# Включить отслеживание прихода/ухода
+PRESENCE_TRACKING_ENABLED = os.getenv("PRESENCE_TRACKING_ENABLED", "true").lower() in ("true", "1", "yes")
+
+# Временное окно для корреляции событий "дверь + лицо" (секунды)
+PRESENCE_TIME_WINDOW = float(os.getenv("PRESENCE_TIME_WINDOW", "30.0"))
+
+# Звуки, которые считаются "дверью" (через запятую, в нижнем регистре)
+# Примеры из YAMNet: door, knock, slam, click
+_door_sounds_str = os.getenv("DOOR_SOUNDS", "door,knock,slam")
+DOOR_SOUNDS = set(s.strip().lower() for s in _door_sounds_str.split(",") if s.strip())
+
+# ============================================
+# URL сервера скриншотов (nginx)
+# ============================================
+# Внешний URL сервера скриншотов для формирования ссылок в MQTT
+# Пример: http://192.168.1.100:8080 (где screenshots-web доступен)
+SCREENSHOTS_WEB_URL = os.getenv("SCREENSHOTS_WEB_URL", "")

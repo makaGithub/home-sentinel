@@ -78,13 +78,22 @@ COPY --from=builder /app /app/code
 RUN mkdir -p /app/tmp
 ENV TMPDIR=/app/tmp
 
-# --- 4. Переменные окружения ---
+# --- 4. Отключаем CUDA баннер и создаём чистый entrypoint ---
+RUN rm -f /opt/nvidia/entrypoint.d/*.sh 2>/dev/null || true && \
+    rm -f /etc/profile.d/cuda*.sh 2>/dev/null || true && \
+    printf '#!/bin/bash\nexec "$@"\n' > /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+# --- 5. Переменные окружения ---
 ENV PYTHONUNBUFFERED=1 \
     OPENCV_LOG_LEVEL=ERROR \
     NO_ALBUMENTATIONS_UPDATE=1 \
+    YOLO_VERBOSE=False \
     LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
 
-# --- 5. Команда запуска ---
+# --- 6. Команда запуска ---
 # WORKDIR будет установлен в /app/code через docker-compose.yml
 CMD ["python3.10", "main.py"]
 
