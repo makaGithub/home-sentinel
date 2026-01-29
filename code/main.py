@@ -589,9 +589,17 @@ def recognize_objects_and_faces(
                         emoji = object_emojis.get(label.split("(")[0] if "(" in label else label, "📦")
                         log(f"   {emoji} {label}")
                 
-                # Сохраняем скриншот только при распознании лиц (если включено)
+                # Сохраняем скриншот только при появлении заданных в .env объектов (person, dog и т.д.)
                 current_screenshot_path = None
-                if config.SCREENSHOTS_ENABLED and faces_recognized:
+                def _current_has_screenshot_objects():
+                    if not config.SCREENSHOT_OBJECTS:
+                        return True
+                    for lbl in current:
+                        base = lbl.split("(", 1)[0] if "(" in lbl else lbl
+                        if base.lower() in config.SCREENSHOT_OBJECTS:
+                            return True
+                    return False
+                if config.SCREENSHOTS_ENABLED and _current_has_screenshot_objects():
                     img_with_boxes = img.copy()
                     for obj in detected_objects:
                         label = obj["label"]

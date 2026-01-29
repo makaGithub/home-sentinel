@@ -14,6 +14,10 @@ SCREENSHOTS_DIR = os.getenv("SCREENSHOTS_DIR", "/app/data/screenshots")
 # Скриншоты: включить/выключить сохранение
 SCREENSHOTS_ENABLED = os.getenv("SCREENSHOTS_ENABLED", "true").lower() in ("true", "1", "yes")
 
+# Сохранять скриншоты только при появлении этих объектов (через запятую в .env). Пусто = при любом изменении.
+_screenshot_objects_str = os.getenv("SCREENSHOT_OBJECTS", "person,dog")
+SCREENSHOT_OBJECTS = set(c.strip().lower() for c in _screenshot_objects_str.split(",") if c.strip())
+
 # Пути к файлам кэша (старый формат)
 EMBEDDINGS_PATH = os.path.join(CACHE_DIR, "embeddings.npy")
 NAMES_PATH = os.path.join(CACHE_DIR, "names.json")
@@ -31,8 +35,14 @@ DB_CONFIG = {
 # Отдельное имя БД для статистики home-sentinel
 VISION_DB_NAME = os.getenv("VISION_DB_NAME", "home-sentinel")
 
-# Источник видео/аудио (RTSP или локальное устройство)
+# Источник видео/аудио: один URL или несколько через запятую (VIDEO_URLS)
+# VIDEO_URL — одна камера (обратная совместимость). VIDEO_URLS — несколько (приоритет).
 VIDEO_URL = os.getenv("VIDEO_URL", "0")
+_video_urls_str = os.getenv("VIDEO_URLS", "").strip()
+if _video_urls_str:
+    STREAM_URLS = [u.strip() for u in _video_urls_str.split(",") if u.strip()]
+else:
+    STREAM_URLS = [VIDEO_URL] if VIDEO_URL else []
 
 # Переподключение к видеопотоку
 STREAM_RECONNECT_ATTEMPTS = int(os.getenv("STREAM_RECONNECT_ATTEMPTS", "50"))  # после N неудач — переподключение
@@ -52,7 +62,7 @@ YOLO_FORCE_GPU = True
 YOLO_IMGSZ = int(os.getenv("YOLO_IMGSZ", "640"))     # размер изображения для обработки (меньше = быстрее)
 YOLO_FP16 = os.getenv("YOLO_FP16", "true").lower() in ("true", "1", "yes")  # FP16 инференс (GPU)
 YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("YOLO_CONFIDENCE_THRESHOLD", "0.25"))  # мин. confidence для объектов
-YOLO_PERSON_CONFIDENCE = float(os.getenv("YOLO_PERSON_CONFIDENCE", "0.2"))        # отдельный порог для person (ниже)
+YOLO_PERSON_CONFIDENCE = float(os.getenv("YOLO_PERSON_CONFIDENCE", "0.55"))        # порог для person (выше = меньше ложных срабатываний типа одежды)
 
 # Игнорируемые классы YOLO (через запятую в .env)
 _ignore_str = os.getenv("YOLO_IGNORE_CLASSES", "bed")

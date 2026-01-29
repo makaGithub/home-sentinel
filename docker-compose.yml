@@ -55,7 +55,7 @@ services:
     environment:
       - SHARED_DIRECTORY=/screenshots
     volumes:
-      - ./data/screenshots:/screenshots:ro
+      - ./data/screenshots:/screenshots:rw
     ports:
       - "${NFS_PORT:-2049}:2049"
     networks:
