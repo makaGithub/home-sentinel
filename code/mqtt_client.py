@@ -88,10 +88,11 @@ def _ensure_device_tracker_registered(name: str):
         return
     device = _get_device_info()
     tracker_id = f"tracker_{safe_name}"
+    state_topic = f"{DEVICE_ID}/device_tracker/{safe_name}/state"
     _publish_discovery_config("device_tracker", tracker_id, {
         "name": f"{name}",
         "unique_id": f"{DEVICE_ID}_{tracker_id}",
-        "state_topic": f"{DEVICE_ID}/device_tracker/{safe_name}/state",
+        "state_topic": state_topic,
         "payload_home": "home",
         "payload_not_home": "not_home",
         "source_type": "router",
@@ -99,10 +100,12 @@ def _ensure_device_tracker_registered(name: str):
         "device": device,
     })
     _registered_trackers.add(safe_name)
+    if config.DEBUG:
+        log(f"🏠 device_tracker registered: {name} → state_topic={state_topic}")
 
 
 def _update_device_tracker(name: str, is_home: bool):
-    global _client
+    global _client, _connected
     if not _client or not _connected:
         return
     _ensure_device_tracker_registered(name)
@@ -110,6 +113,8 @@ def _update_device_tracker(name: str, is_home: bool):
     topic = f"{DEVICE_ID}/device_tracker/{safe_name}/state"
     state = "home" if is_home else "not_home"
     _client.publish(topic, state, qos=1, retain=True)
+    if config.DEBUG:
+        log(f"🏠 device_tracker: {topic} → {state}")
 
 
 def publish_discovery():

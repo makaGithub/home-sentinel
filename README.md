@@ -196,9 +196,6 @@ nano .env
 Чтобы вручную отправить тестовое сообщение с URL картинки лица в топик «Последний кадр» (для проверки интеграции или отладки):
 
 ```bash
-# Без авторизации (локальный брокер)
-mosquitto_pub -h localhost -p 1883 -t "home_sentinel/image/latest/url" -m "https://example.com/test-face.jpg"
-
 # С логином/паролем (подставьте значения из .env: MQTT_BROKER, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD)
 mosquitto_pub -h YOUR_BROKER -p 1883 -u YOUR_USER -P YOUR_PASS -t "home_sentinel/image/latest/url" -m "https://example.com/test-face.jpg"
 ```
