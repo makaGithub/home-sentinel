@@ -6,6 +6,9 @@
 
 import os
 
+# Отладочный режим (DEBUG=1 для подробных логов)
+DEBUG = os.getenv("DEBUG", "").lower() in ("true", "1", "yes")
+
 # Директории
 CACHE_DIR = "/app/cache"
 MODEL_DIR = "/app/models"
@@ -35,14 +38,13 @@ DB_CONFIG = {
 # Отдельное имя БД для статистики home-sentinel
 VISION_DB_NAME = os.getenv("VISION_DB_NAME", "home-sentinel")
 
-# Источник видео/аудио: один URL или несколько через запятую (VIDEO_URLS)
-# VIDEO_URL — одна камера (обратная совместимость). VIDEO_URLS — несколько (приоритет).
+# Источник видео/аудио (RTSP или локальное устройство)
 VIDEO_URL = os.getenv("VIDEO_URL", "0")
-_video_urls_str = os.getenv("VIDEO_URLS", "").strip()
-if _video_urls_str:
-    STREAM_URLS = [u.strip() for u in _video_urls_str.split(",") if u.strip()]
-else:
-    STREAM_URLS = [VIDEO_URL] if VIDEO_URL else []
+
+# Отдельный URL для аудио (если не задан, используется VIDEO_URL)
+# Для go2rtc с Opus аудио используй MP4: http://host:1984/api/stream.mp4?src=cam1
+# (FLV не поддерживает Opus, только AAC/MP3)
+AUDIO_URL = os.getenv("AUDIO_URL", "")
 
 # Переподключение к видеопотоку
 STREAM_RECONNECT_ATTEMPTS = int(os.getenv("STREAM_RECONNECT_ATTEMPTS", "50"))  # после N неудач — переподключение
@@ -97,10 +99,28 @@ FACE_TRACKING_FRAMES = int(os.getenv("FACE_TRACKING_FRAMES", "5"))        # ка
 # Настройки кэша лиц
 FACE_CACHE_VALIDITY_FRAMES = 30  # кэш действителен N кадров
 
-# Классы YAMNet для детекции (из .env, через запятую)
+# Классы YAMNet для детекции (из .env, через запятую). Имена — точное совпадение с yamnet_class_map.csv.
 # Полный список: https://github.com/tensorflow/models/blob/master/research/audioset/yamnet/yamnet_class_map.csv
 _yamnet_str = os.getenv("YAMNET_CLASSES", "Speech,Dog,Bark")
 YAMNET_CLASSES = [s.strip().lower() for s in _yamnet_str.split(",") if s.strip()]
+
+# Порог уверенности YAMNet по умолчанию (0.05–0.2). Ниже = чувствительнее, больше ложных срабатываний.
+YAMNET_CONFIDENCE_THRESHOLD = float(os.getenv("YAMNET_CONFIDENCE_THRESHOLD", "0.05"))
+
+# Пороги по классам (переопределяют общий порог). Формат: Glass:0.25,Bark:0.05,Shatter:0.2
+# Класс в нижнем регистре, значение — минимальный confidence для срабатывания.
+_yamnet_thresholds_str = os.getenv("YAMNET_CLASS_THRESHOLDS", "")
+YAMNET_CLASS_THRESHOLDS = {}
+for part in _yamnet_thresholds_str.split(","):
+    part = part.strip()
+    if ":" in part:
+        k, v = part.split(":", 1)
+        k, v = k.strip().lower(), v.strip()
+        if k:
+            try:
+                YAMNET_CLASS_THRESHOLDS[k] = float(v)
+            except ValueError:
+                pass
 
 # Аудио с камеры приведём к этому sample rate
 AUDIO_SAMPLE_RATE = 16000
@@ -130,6 +150,13 @@ MQTT_EVENT_COOLDOWN = float(os.getenv("MQTT_EVENT_COOLDOWN", "5.0"))
 # ============================================
 # Включить отслеживание прихода/ухода
 PRESENCE_TRACKING_ENABLED = os.getenv("PRESENCE_TRACKING_ENABLED", "true").lower() in ("true", "1", "yes")
+
+# Список имён для device_tracker (формат "Имя Фамилия", через запятую). Регистрируются при старте.
+_persons_str = os.getenv("PRESENCE_TRACKING_PERSONS", "")
+PRESENCE_TRACKING_PERSONS = [s.strip() for s in _persons_str.split(",") if s.strip()]
+
+# Список имён для разрегистрации device_tracker в HA (через запятую). При старте отправляется пустой config.
+PRESENCE_TRACKING_PERSONS_REMOVE = [s.strip() for s in os.getenv("PRESENCE_TRACKING_PERSONS_REMOVE", "").split(",") if s.strip()]
 
 # Временное окно для корреляции событий "дверь + лицо" (секунды)
 PRESENCE_TIME_WINDOW = float(os.getenv("PRESENCE_TIME_WINDOW", "30.0"))

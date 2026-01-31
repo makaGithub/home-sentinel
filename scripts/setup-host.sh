@@ -10,6 +10,22 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+### ================================================================
+###   ARGUMENTS
+### ================================================================
+DO_UPDATE=0
+for arg in "$@"; do
+    case "$arg" in
+        --update|-u) DO_UPDATE=1 ;;
+        --help|-h)
+            echo "Использование: sudo $0 [--update]"
+            echo "  --update, -u   принудительно обновить buildx, конфиги, builder и кеши"
+            echo "                без флага уже установленное не переустанавливается"
+            exit 0
+            ;;
+    esac
+done
+
 echo -e "${BLUE}🔧 Настройка хоста для Ubuntu/Debian + Docker + NVIDIA + BuildKit...${NC}"
 echo ""
 
@@ -26,6 +42,26 @@ fi
 ### ================================================================
 echo -e "${BLUE}📦 Обновление списка пакетов...${NC}"
 apt update -qq
+
+### ================================================================
+###   DISABLE AUTOMATIC UPDATES (Ubuntu/Debian)
+### ================================================================
+echo -e "${BLUE}🔒 Отключение автоматических обновлений...${NC}"
+# Конфиг APT: не обновлять списки и не ставить обновления по расписанию
+cat >/etc/apt/apt.conf.d/20auto-upgrades <<'APTEOF'
+APT::Periodic::Update-Package-Lists "0";
+APT::Periodic::Unattended-Upgrade "0";
+APT::Periodic::Download-Upgradeable-Packages "0";
+APT::Periodic::AutocleanInterval "0";
+APTEOF
+# Сервис unattended-upgrades
+systemctl disable --now unattended-upgrades 2>/dev/null || true
+# Таймеры apt-daily (apt update/upgrade по расписанию)
+systemctl disable --now apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true
+systemctl mask apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true
+# Останавливаем сервисы, если запущены
+systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
+echo -e "${GREEN}✔ Автообновления отключены (обновляйте систему вручную)${NC}"
 
 ### ================================================================
 ###   INSTALL REQUIRED PACKAGES
@@ -101,16 +137,32 @@ else
 fi
 
 ### ================================================================
-###   CONFIGURE DOCKER DAEMON + DNS + RUNTIME
+###   DOCKER SUBNETS (daemon.json + firewall)
 ### ================================================================
-echo -e "${BLUE}⚙️ Настройка /etc/docker/daemon.json ...${NC}"
+DOCKER_SUBNETS=(
+    "172.17.0.0/16"
+    "172.18.0.0/16"
+    "172.19.0.0/16"
+    "172.20.0.0/16"
+)
 
+### ================================================================
+###   CONFIGURE DOCKER DAEMON + DNS + RUNTIME + ADDRESS POOLS
+### ================================================================
 mkdir -p /etc/docker
-
-cat >/etc/docker/daemon.json <<EOF
+if [[ ! -f /etc/docker/daemon.json ]] || [[ "$DO_UPDATE" = 1 ]]; then
+    echo -e "${BLUE}⚙️ Настройка /etc/docker/daemon.json ...${NC}"
+    # default-address-pools: те же подсети, что и в UFW DOCKER-USER
+    cat >/etc/docker/daemon.json <<EOF
 {
   "default-runtime": "nvidia",
   "dns": ["8.8.8.8", "1.1.1.1"],
+  "default-address-pools": [
+    {"base": "172.17.0.0/16", "size": 24},
+    {"base": "172.18.0.0/16", "size": 24},
+    {"base": "172.19.0.0/16", "size": 24},
+    {"base": "172.20.0.0/16", "size": 24}
+  ],
   "runtimes": {
     "nvidia": {
       "path": "nvidia-container-runtime",
@@ -122,81 +174,100 @@ cat >/etc/docker/daemon.json <<EOF
   }
 }
 EOF
-
-systemctl restart docker
-sleep 2
+    systemctl restart docker
+    sleep 2
+else
+    echo -e "${GREEN}✔ daemon.json уже настроен (--update для перезаписи)${NC}"
+fi
 
 ### ================================================================
 ###   INSTALL/UPDATE DOCKER BUILDX (LATEST VERSION)
 ### ================================================================
-echo -e "${BLUE}⬆ Обновление Docker Buildx...${NC}"
+# Системный плагин из пакета Docker иногда падает с segfault (Invalid Plugins: buildx failed to fetch metadata: signal: segmentation fault).
+# Всегда ставим/подменяем плагин версией с GitHub и перезаписываем системный путь.
+BUILDX_PATH="/usr/local/lib/docker/cli-plugins/docker-buildx"
+BUILDX_SYSTEM_PLUGIN="/usr/lib/docker/cli-plugins/docker-buildx"
+mkdir -p /usr/local/lib/docker/cli-plugins
 
-sudo mkdir -p /usr/local/lib/docker/cli-plugins
+if [[ ! -x "$BUILDX_PATH" ]] || [[ "$DO_UPDATE" = 1 ]]; then
+    echo -e "${BLUE}⬆ Обновление Docker Buildx...${NC}"
+    ARCH=$(uname -m)
+    case "$ARCH" in
+        x86_64) BUILDX_ARCH="amd64" ;;
+        aarch64|arm64) BUILDX_ARCH="arm64" ;;
+        *) BUILDX_ARCH="amd64" ;;
+    esac
 
-ARCH=$(uname -m)
-case "$ARCH" in
-    x86_64) BUILDX_ARCH="amd64" ;;
-    aarch64|arm64) BUILDX_ARCH="arm64" ;;
-    *) BUILDX_ARCH="amd64" ;;
-esac
+    LATEST=$(curl -s https://api.github.com/repos/docker/buildx/releases/latest \
+     | grep tag_name | cut -d '"' -f 4)
+    if [[ -z "$LATEST" ]]; then
+        LATEST="v0.14.1"
+    fi
 
-LATEST=$(curl -s https://api.github.com/repos/docker/buildx/releases/latest \
- | grep tag_name | cut -d '"' -f 4)
-
-if [ -z "$LATEST" ]; then
-    LATEST="v0.14.1"
+    echo -e "${BLUE}📥 Скачивание buildx $LATEST (${BUILDX_ARCH})...${NC}"
+    curl -SL \
+      "https://github.com/docker/buildx/releases/download/${LATEST}/buildx-${LATEST}.linux-${BUILDX_ARCH}" \
+      -o "$BUILDX_PATH"
+    chmod +x "$BUILDX_PATH"
+    # Подменить системный плагин (из docker-ce), иначе при segfault Docker грузит сломанный бинарник
+    mkdir -p "$(dirname "$BUILDX_SYSTEM_PLUGIN")"
+    cp -f "$BUILDX_PATH" "$BUILDX_SYSTEM_PLUGIN"
+    chmod +x "$BUILDX_SYSTEM_PLUGIN"
+    if systemctl is-active --quiet docker; then
+        systemctl restart docker
+        sleep 2
+    fi
+    echo -e "${GREEN}✔ Buildx установлен/обновлён до ${LATEST}${NC}"
+else
+    echo -e "${GREEN}✔ Buildx уже установлен (--update для обновления)${NC}"
+    # Всё равно подменяем системный плагин нашей копией (на случай обновления пакета docker-ce)
+    if [[ -x "$BUILDX_PATH" ]]; then
+        mkdir -p "$(dirname "$BUILDX_SYSTEM_PLUGIN")"
+        cp -f "$BUILDX_PATH" "$BUILDX_SYSTEM_PLUGIN"
+        chmod +x "$BUILDX_SYSTEM_PLUGIN"
+    fi
 fi
-
-echo -e "${BLUE}📥 Скачивание buildx $LATEST (${BUILDX_ARCH})...${NC}"
-
-curl -SL \
-  https://github.com/docker/buildx/releases/download/${LATEST}/buildx-${LATEST}.linux-${BUILDX_ARCH} \
-  -o /usr/local/lib/docker/cli-plugins/docker-buildx
-
-chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
-
-echo -e "${GREEN}✔ Buildx обновлён до ${LATEST}${NC}"
 
 ### ================================================================
 ###   CONFIGURE BUILDKITD DNS
 ### ================================================================
-echo -e "${BLUE}🌐 Настройка BuildKit DNS...${NC}"
-
-cat >/etc/docker/buildkitd.toml <<EOF
+if [[ ! -f /etc/docker/buildkitd.toml ]] || [[ "$DO_UPDATE" = 1 ]]; then
+    echo -e "${BLUE}🌐 Настройка BuildKit DNS...${NC}"
+    cat >/etc/docker/buildkitd.toml <<EOF
 [worker.oci]
   netns = "host"
 
 [worker.oci.network]
   nameservers = ["8.8.8.8", "1.1.1.1"]
 EOF
-
-systemctl restart docker
-sleep 2
+    systemctl restart docker
+    sleep 2
+else
+    echo -e "${GREEN}✔ buildkitd.toml уже настроен (--update для перезаписи)${NC}"
+fi
 
 ### ================================================================
-###   RESET BUILDKIT CACHE
+###   RESET BUILDKIT CACHE (только при --update)
 ### ================================================================
-echo -e "${BLUE}🧹 Очистка BuildKit кешей...${NC}"
-
-docker buildx prune -a -f >/dev/null 2>&1 || true
-rm -rf /var/lib/docker/buildkit 2>/dev/null || true
-sleep 1
+if [[ "$DO_UPDATE" = 1 ]]; then
+    echo -e "${BLUE}🧹 Очистка BuildKit кешей...${NC}"
+    docker buildx prune -a -f >/dev/null 2>&1 || true
+    rm -rf /var/lib/docker/buildkit 2>/dev/null || true
+    sleep 1
+fi
 
 ### ================================================================
 ###   CREATE NEW BUILDER "sane-builder"
 ### ================================================================
-echo -e "${BLUE}🏗 Создание нового Buildx builder sane-builder...${NC}"
-
-docker buildx rm sane-builder >/dev/null 2>&1 || true
-
-docker buildx create \
-    --name sane-builder \
-    --driver docker-container \
-    --use >/dev/null
-
-docker buildx inspect sane-builder --bootstrap
-
-echo -e "${GREEN}✔ Builder sane-builder создан${NC}"
+if ! docker buildx inspect sane-builder &>/dev/null || [[ "$DO_UPDATE" = 1 ]]; then
+    echo -e "${BLUE}🏗 Создание Buildx builder sane-builder...${NC}"
+    docker buildx rm sane-builder >/dev/null 2>&1 || true
+    docker buildx create --name sane-builder --driver docker-container --use >/dev/null
+    docker buildx inspect sane-builder --bootstrap
+    echo -e "${GREEN}✔ Builder sane-builder создан${NC}"
+else
+    echo -e "${GREEN}✔ Builder sane-builder уже есть (--update для пересоздания)${NC}"
+fi
 
 ### ================================================================
 ###   TEST BUILDKIT DNS

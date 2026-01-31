@@ -12,19 +12,18 @@ import config
 from utils import log
 
 
-def open_camera(src: str, label: str = ""):
+def open_camera():
     """
-    Открывает один видеопоток через OpenCV (FFMPEG).
+    Открывает видеопоток через OpenCV (FFMPEG).
     При RTSP принудительно добавляет TCP-транспорт.
-    label — для лога (например номер камеры).
     """
-    prefix = f" [{label}]" if label else ""
-    log(f"🎥 Подключение к видеопотоку{prefix}: {src}")
+    src = config.VIDEO_URL
+    log(f"🎥 Подключение к удаленному видеопотоку: {src}")
 
     if isinstance(src, str) and src.startswith("rtsp://") and "rtsp_transport" not in src:
         sep = "&" if "?" in src else "?"
-        src = src + f"{sep}rtsp_transport=tcp"
-        log(f"   Использую RTSP over TCP{prefix}")
+        src += f"{sep}rtsp_transport=tcp"
+        log(f"   Использую RTSP over TCP: {src}")
 
     # Low-latency опции для OpenCV/FFMPEG (чтобы не копить кадры “на минуты”)
     # Важно: переменная окружения должна быть задана ДО создания VideoCapture.
@@ -33,12 +32,14 @@ def open_camera(src: str, label: str = ""):
 
     cap = cv2.VideoCapture(src, cv2.CAP_FFMPEG)
     if not cap.isOpened():
-        log(f"❌ Не удалось открыть видеопоток{prefix}.")
+        log("❌ Не удалось открыть видеопоток.")
         return None
 
     # Устанавливаем размер буфера на 1 кадр для минимизации задержки
+    # Это гарантирует, что всегда читается последний кадр, а не старый из буфера
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-    log(f"✅ Видеопоток подключен{prefix}")
+    
+    log("✅ Видеопоток подключен")
     return cap
 
 
@@ -92,26 +93,9 @@ class LatestFrameStream:
             pass
 
 
-def open_camera_stream(src: str | None = None, label: str = ""):
-    """Открывает один видеопоток и возвращает LatestFrameStream или None. src=None — первый из config.STREAM_URLS."""
-    if src is None:
-        urls = config.STREAM_URLS
-        src = urls[0] if urls else config.VIDEO_URL or "0"
-    cap = open_camera(src, label=label)
+def open_camera_stream():
+    """Открывает видеопоток и возвращает LatestFrameStream или None."""
+    cap = open_camera()
     if cap is None:
         return None
     return LatestFrameStream(cap)
-
-
-def open_camera_streams(urls: list[str]) -> list:
-    """
-    Открывает несколько видеопотоков. Возвращает список LatestFrameStream (или None для неудачных).
-    """
-    if not urls:
-        return []
-    streams = []
-    for i, url in enumerate(urls):
-        label = str(i) if len(urls) > 1 else ""
-        s = open_camera_stream(src=url, label=label)
-        streams.append(s)
-    return streams

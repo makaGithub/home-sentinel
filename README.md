@@ -187,6 +187,30 @@ nano .env
   - Анализ аудио потоков (YAMNet - классификация звуков)
   - Запись статистики в PostgreSQL
 
+## MQTT и Home Assistant
+
+Сервис публикует в MQTT события и состояния для интеграции с Home Assistant (Discovery, сенсоры, триггеры). Идентификатор устройства задаётся в `.env` как `MQTT_DEVICE_ID` (по умолчанию `home_sentinel`).
+
+### Тестовая отправка URL распознанного лица
+
+Чтобы вручную отправить тестовое сообщение с URL картинки лица в топик «Последний кадр» (для проверки интеграции или отладки):
+
+```bash
+# Без авторизации (локальный брокер)
+mosquitto_pub -h localhost -p 1883 -t "home_sentinel/image/latest/url" -m "https://example.com/test-face.jpg"
+
+# С логином/паролем (подставьте значения из .env: MQTT_BROKER, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD)
+mosquitto_pub -h YOUR_BROKER -p 1883 -u YOUR_USER -P YOUR_PASS -t "home_sentinel/image/latest/url" -m "https://example.com/test-face.jpg"
+```
+
+Если в `.env` задан другой `MQTT_DEVICE_ID`, замените `home_sentinel` в топике на его значение. После публикации в Home Assistant обновится сущность «Последний кадр» (image) и покажет указанный URL.
+
+Опционально можно отправить и сенсор «Последнее лицо» (имя + confidence):
+
+```bash
+mosquitto_pub -h localhost -p 1883 -t "home_sentinel/sensor/last_face" -m '{"name":"Test User","confidence":0.95,"frame":0,"timestamp":"2025-01-30T12:00:00"}'
+```
+
 ## Troubleshooting
 
 ### Проблемы с деплоем
