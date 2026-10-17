@@ -95,8 +95,8 @@ def _ensure_device_tracker_registered(name: str):
         "state_topic": state_topic,
         "payload_home": "home",
         "payload_not_home": "not_home",
-        "source_type": "router",
-        "icon": "mdi:account",
+        "source_type": "bluetooth_le",  # HA лучше интегрирует BLE в Person, чем router
+        "icon": "mdi:face-recognition",
         "device": device,
     })
     _registered_trackers.add(safe_name)
