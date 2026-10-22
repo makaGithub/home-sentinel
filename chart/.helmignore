@@ -1,0 +1,10 @@
+.DS_Store
+.git/
+.gitignore
+*.swp
+*.bak
+*.tgz
+*.tar.gz
+charts/
+values-azhizhin.yaml
+values-*.local.yaml

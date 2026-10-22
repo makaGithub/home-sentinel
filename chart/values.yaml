@@ -1,0 +1,66 @@
+replicaCount: 1
+
+image:
+  repository: harbor.iportal.ru/zhizhin/hs-gpu-helper
+  pullPolicy: Always
+  tag: "0.1.2"
+
+imagePullSecrets:
+  - name: harbor-zhizhin
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+securityContext: {}
+
+service:
+  type: LoadBalancer
+  port: 8080
+  targetPort: 8080
+  loadBalancerIP: ""
+  annotations: {}
+
+persistence:
+  enabled: true
+  type: pvc
+  name: data
+  accessModes:
+    - ReadWriteOnce
+  size: 20Gi
+  storageClassName: local-path
+  hostPath: /var/lib/hs-gpu-helper
+
+resources:
+  limits:
+    nvidia.com/gpu: 1
+  requests:
+    nvidia.com/gpu: 1
+    cpu: 500m
+    memory: 2Gi
+
+nodeSelector:
+  node-role.kubernetes.io/gpu-worker: ""
+  kubernetes.io/hostname: d-k8s-dev-gpu-worker02
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+affinity: {}
+
+# Inference-only; streams stay on home-sentinel (compose)
+env:
+  NVIDIA_DISABLE_REQUIRE: "1"
+  NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+  PYTHONUNBUFFERED: "1"
+  CPU_THREADS: "4"
+  YOLO_MODEL: "yolov8n.pt"
+  YOLO_FP16: "true"

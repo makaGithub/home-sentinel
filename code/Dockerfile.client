@@ -1,0 +1,35 @@
+# syntax=harbor.iportal.ru/hub.docker.com/docker/dockerfile:1.4
+# home-sentinel CPU client (streams + pretty logs). GPU → hs-gpu-helper.
+
+ARG PYTHON_IMAGE=harbor.iportal.ru/hub.docker.com/library/python:3.10-slim-bookworm
+FROM ${PYTHON_IMAGE}
+
+ARG PKG_CACHE_DEBIAN=http://pkg-cache-debian.iportal.ru
+ARG PIP_INDEX_URL=https://devpi.iportal.ru/root/pypi/+simple/
+ARG PIP_TRUSTED_HOST=devpi.iportal.ru
+
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONUNBUFFERED=1 \
+    OPENCV_LOG_LEVEL=ERROR
+
+RUN set -eux; \
+    find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) \
+      -exec sed -i "s|https\\?://deb.debian.org|${PKG_CACHE_DEBIAN}|g" {} +; \
+    apt-get update && apt-get install -y --no-install-recommends \
+      ffmpeg \
+      libgl1 libglib2.0-0 \
+      fonts-dejavu-core fonts-liberation \
+      && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app/code
+COPY requirements-client.txt /tmp/requirements-client.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-client.txt
+COPY . /app/code
+
+RUN mkdir -p /app/cache /app/models /app/data/screenshots /app/tmp
+ENV TMPDIR=/app/tmp \
+    SCREENSHOTS_DIR=/app/data/screenshots
+
+CMD ["python3", "main.py"]

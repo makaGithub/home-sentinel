@@ -1,0 +1,8 @@
+hs-gpu-helper deployed.
+
+  kubectl -n {{ .Release.Namespace }} get svc {{ include "hs-gpu-helper.fullname" . }}
+  kubectl -n {{ .Release.Namespace }} logs -f deploy/{{ include "hs-gpu-helper.fullname" . }}
+
+Point home-sentinel (compose) at the LoadBalancer:
+
+  GPU_HELPER_URL=http://<EXTERNAL-IP>:{{ .Values.service.port }}

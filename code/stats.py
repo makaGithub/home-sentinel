@@ -4,11 +4,13 @@
 - запись распознанных лиц
 - запись распознанных звуков
 в отдельную БД home-sentinel (VISION_DB_NAME)
+
+Отключается через STATS_ENABLED=false (по умолчанию выкл.).
 """
 
 import psycopg2
 
-from config import DB_CONFIG, VISION_DB_NAME
+from config import DB_CONFIG, STATS_ENABLED, VISION_DB_NAME
 from utils import log
 
 
@@ -21,6 +23,8 @@ def _conn():
 
 def init_tables():
     """Создаёт таблицы статистики, если их ещё нет."""
+    if not STATS_ENABLED:
+        return
     try:
         conn = _conn()
         cur = conn.cursor()
@@ -50,6 +54,8 @@ def init_tables():
 
 def record_person_seen(name: str):
     """Записывает факт появления человека."""
+    if not STATS_ENABLED:
+        return
     try:
         conn = _conn()
         cur = conn.cursor()
@@ -66,6 +72,8 @@ def record_person_seen(name: str):
 
 def record_sound_detected(sound: str):
     """Записывает факт обнаружения звука."""
+    if not STATS_ENABLED:
+        return
     try:
         conn = _conn()
         cur = conn.cursor()

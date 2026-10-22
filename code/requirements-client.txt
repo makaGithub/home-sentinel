@@ -1,0 +1,7 @@
+numpy>=1.24,<2.0
+pillow
+opencv-python-headless
+psycopg2-binary
+python-dotenv
+requests
+paho-mqtt

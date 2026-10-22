@@ -1,0 +1,13 @@
+# cp chart/values-azhizhin.yaml.example chart/values-azhizhin.yaml
+image:
+  repository: harbor.iportal.ru/zhizhin/hs-gpu-helper
+  tag: "0.1.1"
+
+service:
+  type: LoadBalancer
+  port: 8080
+
+env:
+  IMMICH_DB_HOST: "192.168.34.254"
+  IMMICH_DB_PASSWORD: "CHANGE_ME"
+  YAMNET_CLASSES: "Bark,Howl,Dog,Knock,Door"

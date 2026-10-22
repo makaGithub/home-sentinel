@@ -9,6 +9,9 @@ import os
 # Отладочный режим (DEBUG=1 для подробных логов)
 DEBUG = os.getenv("DEBUG", "").lower() in ("true", "1", "yes")
 
+# URL hs-gpu-helper (LoadBalancer в k8s). Пустой = локальный режим не поддерживается.
+GPU_HELPER_URL = os.getenv("GPU_HELPER_URL", "http://127.0.0.1:8080")
+
 # Директории
 CACHE_DIR = "/app/cache"
 MODEL_DIR = "/app/models"
@@ -37,6 +40,7 @@ DB_CONFIG = {
 
 # Отдельное имя БД для статистики home-sentinel
 VISION_DB_NAME = os.getenv("VISION_DB_NAME", "home-sentinel")
+STATS_ENABLED = os.getenv("STATS_ENABLED", "false").lower() in ("true", "1", "yes")
 
 # Источник видео/аудио (RTSP или локальное устройство)
 VIDEO_URL = os.getenv("VIDEO_URL", "0")

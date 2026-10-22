@@ -1,0 +1,11 @@
+__pycache__
+*.py[cod]
+*.so
+.Python
+.venv
+venv
+*.pt
+*.onnx
+.git
+.DS_Store
+*.md

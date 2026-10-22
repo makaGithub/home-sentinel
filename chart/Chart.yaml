@@ -1,0 +1,6 @@
+apiVersion: v2
+name: hs-gpu-helper
+description: Home Sentinel GPU helper (YOLO + InsightFace + YAMNet HTTP API)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -1,0 +1,31 @@
+# syntax=harbor.iportal.ru/hub.docker.com/docker/dockerfile:1.4
+#
+# Быстрый rebuild hs-gpu-helper поверх уже собранного образа
+# (torch/ort/tf уже внутри — ставим только fastapi + новый код).
+#
+#   BASE_IMAGE=harbor.iportal.ru/zhizhin/home-sentinel:0.1.0
+
+ARG BASE_IMAGE=harbor.iportal.ru/zhizhin/home-sentinel:0.1.0
+FROM ${BASE_IMAGE}
+
+ARG PIP_INDEX_URL=https://devpi.iportal.ru/root/pypi/+simple/
+ARG PIP_TRUSTED_HOST=devpi.iportal.ru
+
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PORT=8080
+
+WORKDIR /app/code
+
+# fastapi/uvicorn не было в базовом образе
+# setuptools>=82 убрал pkg_resources — TF/YAMNet его ещё требуют
+RUN python3.10 -m pip install --no-cache-dir \
+    "fastapi>=0.110,<1" "uvicorn[standard]>=0.27,<1" \
+    "setuptools>=65,<81"
+
+COPY gpu_helper /app/code/gpu_helper
+COPY models.py embeddings.py database.py config.py utils.py c_silence.py /app/code/
+
+EXPOSE 8080
+CMD ["python3.10", "-m", "gpu_helper.server"]
