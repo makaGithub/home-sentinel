@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: harbor.iportal.ru/zhizhin/hs-gpu-helper
   pullPolicy: Always
-  tag: "0.1.2"
+  tag: "0.1.3"
 
 imagePullSecrets:
   - name: harbor-zhizhin
@@ -27,7 +27,8 @@ service:
   port: 8080
   targetPort: 8080
   loadBalancerIP: ""
-  annotations: {}
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: hs-gpu-helper.iportal.ru
 
 persistence:
   enabled: true

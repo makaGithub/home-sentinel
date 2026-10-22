@@ -3,9 +3,9 @@
 # Быстрый rebuild hs-gpu-helper поверх уже собранного образа
 # (torch/ort/tf уже внутри — ставим только fastapi + новый код).
 #
-#   BASE_IMAGE=harbor.iportal.ru/zhizhin/home-sentinel:0.1.0
+#   BASE_IMAGE=harbor.iportal.ru/zhizhin/hs-gpu-helper:0.1.3
 
-ARG BASE_IMAGE=harbor.iportal.ru/zhizhin/home-sentinel:0.1.0
+ARG BASE_IMAGE=harbor.iportal.ru/zhizhin/hs-gpu-helper:0.1.3
 FROM ${BASE_IMAGE}
 
 ARG PIP_INDEX_URL=https://devpi.iportal.ru/root/pypi/+simple/

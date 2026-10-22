@@ -10,6 +10,7 @@ import numpy as np
 import requests
 
 import config
+from embeddings import faces_to_pickle_blob, load_faces_db_or_cache
 from utils import log
 
 
@@ -34,6 +35,25 @@ class GpuHelperClient:
             time.sleep(delay)
         log("❌ GPU недоступна")
         return False
+
+    def sync_faces(self) -> int:
+        """Тянет лица из Immich (или кэша) и заливает в hs-gpu-helper."""
+        (embs, names, ids, confs), source = load_faces_db_or_cache()
+        blob = faces_to_pickle_blob(embs, names, ids, confs)
+        log(
+            f"📤 Загрузка лиц на GPU ({len(names)} чел., "
+            f"{len(blob) / 1e6:.1f} MB, источник={source})..."
+        )
+        r = self._session.post(
+            f"{self.base_url}/v1/faces",
+            data=blob,
+            headers={"Content-Type": "application/octet-stream"},
+            timeout=max(self.timeout, 120.0),
+        )
+        r.raise_for_status()
+        people = int(r.json().get("people") or len(names))
+        log(f"✅ Лица на GPU: {people} человек")
+        return people
 
     def vision(self, img: np.ndarray) -> list[dict[str, Any]]:
         ok, buf = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 85])

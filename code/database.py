@@ -1,6 +1,7 @@
 # database.py
 """
-Работа с PostgreSQL Immich: вытаскивание векторных представлений и confidence.
+Работа с PostgreSQL Immich: вытаскивание векторных представлений лиц.
+Схема Immich (personGroupId / person_group), не старый personId.
 """
 
 import json
@@ -16,14 +17,11 @@ from utils import log, _l2_normalize
 def fetch_embeddings_from_db():
     """
     Грузит векторные представления из Immich:
-    - p.id, p.name, fs.embedding, af.confidence (если доступно)
-    - группирует по personId
+    - person."personGroupId", person.name, face_search.embedding
+    - группирует по personGroupId
     - нормализует каждое векторное представление
     Возвращает:
-        all_embs_list: List[List[np.ndarray]]
-        names: List[str]
-        ids: List[int]
-        all_confidences_list: List[List[float]]
+        all_embs_list, names, ids, all_confidences_list
     """
     start_time = time.time()
     log("📡 Подключаюсь к базе Immich...")
@@ -48,14 +46,17 @@ def fetch_embeddings_from_db():
     log("📊 Выполняю запрос к базе данных...")
 
     query_start = time.time()
+    # Immich: asset_face.personGroupId → person_group ← person.personGroupId
     cur.execute(
         """
-        SELECT p.id, p.name, fs.embedding
+        SELECT p."personGroupId", p.name, fs.embedding
         FROM person p
-        JOIN asset_face af ON af."personId" = p.id
+        JOIN asset_face af ON af."personGroupId" = p."personGroupId"
         JOIN face_search fs ON fs."faceId" = af.id
-        WHERE p.name IS NOT NULL AND TRIM(p.name) <> ''
-        ORDER BY p.id;
+        WHERE TRIM(p.name) <> ''
+          AND af."deletedAt" IS NULL
+          AND af."isVisible" IS TRUE
+        ORDER BY p."personGroupId";
         """
     )
     query_time = time.time() - query_start
@@ -88,17 +89,12 @@ def fetch_embeddings_from_db():
         if not pname or emb is None:
             continue
 
-        if isinstance(emb, str):
-            try:
-                emb = json.loads(emb)
-            except Exception:
-                emb = [float(x) for x in emb.strip("[] ").split(",") if x.strip()]
-
-        emb = np.asarray(emb, dtype=np.float32)
-        if emb.ndim != 1:
+        emb = _parse_embedding(emb)
+        if emb is None:
             continue
 
-        rec = by_id.setdefault(pid, {"name": pname.strip(), "embs": []})
+        pid_key = str(pid)
+        rec = by_id.setdefault(pid_key, {"name": pname.strip(), "embs": []})
         rec["embs"].append(emb)
 
     log(f"✅ Обработка завершена. Найдено {len(by_id)} уникальных персон")
@@ -113,14 +109,29 @@ def fetch_embeddings_from_db():
 
         normalized_embs = [_l2_normalize(emb) for emb in rec["embs"]]
         all_embs_list.append(normalized_embs)
-        # Confidence не поддерживается в Immich <= v2.4.1, используем 1.0
         all_confidences_list.append([1.0] * len(normalized_embs))
 
     log(f"✅ Загружено {len(ids)} лиц из Immich:")
     for pid, name, embs_list in zip(ids, names, all_embs_list):
-        log(f"   - {pid:<4} | {name} ({len(embs_list)} векторов)")
+        log(f"   - {str(pid)[:8]:<8} | {name} ({len(embs_list)} векторов)")
 
     total_time = time.time() - start_time
     log(f"✅ Загрузка из базы завершена за {total_time:.2f} сек")
 
     return all_embs_list, names, ids, all_confidences_list
+
+
+def _parse_embedding(emb):
+    if isinstance(emb, str):
+        try:
+            emb = json.loads(emb)
+        except Exception:
+            # pgvector text: [1.0,2.0,...]
+            emb = [float(x) for x in emb.strip("[] ").split(",") if x.strip()]
+    elif hasattr(emb, "tolist"):
+        emb = emb.tolist()
+
+    arr = np.asarray(emb, dtype=np.float32)
+    if arr.ndim != 1 or arr.size == 0:
+        return None
+    return arr

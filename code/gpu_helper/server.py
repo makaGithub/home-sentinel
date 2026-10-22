@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""hs-gpu-helper HTTP API (GPU inference only)."""
+"""hs-gpu-helper HTTP API (GPU inference only). Immich DB не используется."""
 
 from __future__ import annotations
 
@@ -21,8 +21,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-import config
-from embeddings import load_or_refresh_cache
+from embeddings import (
+    faces_from_pickle_blob,
+    load_or_refresh_cache,
+    save_faces_cache,
+)
 from gpu_helper.audio_infer import YamnetEngine
 from gpu_helper.logutil import audio_stats, vision_stats
 from gpu_helper.vision import detect_objects_and_faces
@@ -36,6 +39,13 @@ _embeddings = ([], [], [], [])
 _yamnet = YamnetEngine()
 
 
+def _set_embeddings(embs, names, ids, confs) -> int:
+    global _embeddings
+    with _state_lock:
+        _embeddings = (embs, names, ids, confs)
+    return len(names)
+
+
 def _init_models() -> None:
     global _ready, _yolo, _face_app, _embeddings
     print("[init] loading models", flush=True)
@@ -43,8 +53,13 @@ def _init_models() -> None:
     print("[init] yolo ready", flush=True)
     _face_app = init_face_analysis()
     print("[init] insightface ready", flush=True)
-    _embeddings = load_or_refresh_cache()
-    print(f"[init] faces={len(_embeddings[0])}", flush=True)
+    # Только локальный кэш (заливка с home-sentinel). В Immich DB не ходим.
+    try:
+        _embeddings = load_or_refresh_cache(force_refresh=False, allow_db=False)
+        print(f"[init] faces={len(_embeddings[0])} (local cache)", flush=True)
+    except Exception as e:
+        _embeddings = ([], [], [], [])
+        print(f"[init] faces=0 (no cache): {e}", flush=True)
     try:
         _yamnet.load()
     except Exception as e:
@@ -67,12 +82,39 @@ app = FastAPI(title="hs-gpu-helper", docs_url=None, redoc_url=None, lifespan=lif
 def health():
     with _state_lock:
         ready = _ready
+        n_faces = len(_embeddings[0])
     return {
         "ok": True,
         "ready": ready,
+        "faces": n_faces,
         "vision": vision_stats.snapshot(),
         "audio": audio_stats.snapshot(),
     }
+
+
+@app.post("/v1/faces")
+async def upload_faces(request: Request):
+    """Принимает pickle-пакет лиц от home-sentinel (без Immich на helper)."""
+    with _state_lock:
+        ready = _ready
+    if not ready:
+        return JSONResponse({"error": "not_ready"}, status_code=503)
+
+    body = await request.body()
+    if not body:
+        return JSONResponse({"error": "empty_body"}, status_code=400)
+
+    try:
+        embs, names, ids, confs = faces_from_pickle_blob(body)
+        n = _set_embeddings(embs, names, ids, confs)
+        try:
+            save_faces_cache(embs, names, ids, confs)
+        except Exception as e:
+            print(f"[faces] cache save failed: {e}", flush=True)
+        print(f"[faces] uploaded people={n}", flush=True)
+        return {"ok": True, "people": n}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
 
 
 @app.post("/v1/vision")

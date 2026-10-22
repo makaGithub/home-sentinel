@@ -37,7 +37,7 @@ if [[ "${FULL_BUILD}" == "1" ]]; then
     --push \
     "${ROOT}/code"
 else
-  BASE_IMAGE="${BASE_IMAGE:-harbor.iportal.ru/zhizhin/home-sentinel:0.1.0}"
+  BASE_IMAGE="${BASE_IMAGE:-harbor.iportal.ru/zhizhin/hs-gpu-helper:0.1.3}"
   echo "==> LAYER build ${FULL_IMAGE}"
   echo "    base: ${BASE_IMAGE}"
   echo "    (only fastapi + gpu_helper code)"

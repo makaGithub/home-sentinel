@@ -28,7 +28,6 @@ from PIL import Image, ImageDraw, ImageFont
 import stats
 from audio_detector import AudioDetector
 from camera import open_camera_stream
-from demo_boot_log import replay_immich_faces_boot
 from gpu_client import GpuHelperClient
 from mqtt_client import (
     init_mqtt,
@@ -427,8 +426,8 @@ if __name__ == "__main__":
         if not gpu.wait_ready():
             raise RuntimeError("GPU недоступна")
 
-        # Демо: проигрываем сохранённый лог Immich (реальная БД не нужна)
-        replay_immich_faces_boot()
+        # Immich → (кэш) → заливка эмбеддингов в hs-gpu-helper
+        gpu.sync_faces()
 
         stream = open_camera_stream()
         if stream is None:
