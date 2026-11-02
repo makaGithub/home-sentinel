@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Wallpaper GIF Daemon
+Comment=Отрисовка анимированных GIF и JPG слайдов на рабочем столе LXQt
+Exec=/home/a.zhizhin/.local/bin/wallpaper-daemon.py
+Terminal=false
+X-GNOME-Autostart-enabled=true
+X-LXQt-Module=false
+OnlyShowIn=LXQt;
+Categories=Utility;

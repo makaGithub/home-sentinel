@@ -52,6 +52,12 @@ docs/_build/*
 docs/_build/**/*
 !docs/_build/**/.gitkeep
 
+# Demo wallpapers (бинарники на Google Drive, см. wallpapers/README.md)
+wallpapers/out/*
+!wallpapers/out/.gitkeep
+wallpapers/strazh_wallpaper_base.jpg
+wallpapers/**/*.gif
+
 # YOLO model files in code directory (если есть)
 vision_bridge/*.pt
 

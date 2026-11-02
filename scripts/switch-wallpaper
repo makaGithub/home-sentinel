@@ -1,0 +1,77 @@
+#!/bin/bash
+# Ручное переключение фона: стоп слайдшоу + prev/next/номер.
+# Сразу пишет индекс — демон переключает кадр без sleep/show-desktop.
+export DISPLAY="${DISPLAY:-:0}"
+if [[ -z "${XAUTHORITY:-}" && -f "$HOME/.Xauthority" ]]; then
+  export XAUTHORITY="$HOME/.Xauthority"
+fi
+
+STATE_FILE="/tmp/maka_wallpaper_idx"
+PID_FILE="/tmp/maka_wallpaper_slideshow.pid"
+DAEMON_PID_FILE="/tmp/maka_wallpaper_daemon.pid"
+
+BASES=(
+  "bg_00_title"
+  "bg_01_hardware"
+  "bg_02_smart_home"
+  "bg_03_results_final"
+)
+NAMES=(
+  "1/4 · Страж дома · LIVE DEMO"
+  "2/4 · Железо своими руками"
+  "3/4 · Умный дом · актуальность"
+  "4/4 · Итоги и приватность"
+)
+N=${#BASES[@]}
+
+ensure_daemon() {
+  if [[ -f "$DAEMON_PID_FILE" ]]; then
+    local dpid
+    dpid="$(cat "$DAEMON_PID_FILE" 2>/dev/null || true)"
+    if [[ -n "${dpid:-}" ]] && kill -0 "$dpid" 2>/dev/null; then
+      return 0
+    fi
+  fi
+  nohup "$HOME/.local/bin/wallpaper-daemon.py" </dev/null >/tmp/wallpaper-daemon.log 2>&1 &
+}
+
+stop_slideshow() {
+  if [[ -f "$PID_FILE" ]]; then
+    local old
+    old="$(cat "$PID_FILE" 2>/dev/null || true)"
+    rm -f "$PID_FILE"
+    if [[ -n "${old:-}" ]] && kill -0 "$old" 2>/dev/null; then
+      kill "$old" 2>/dev/null || true
+    fi
+  fi
+}
+
+ensure_daemon
+
+CUR=0
+[[ -f "$STATE_FILE" ]] && CUR=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
+[[ "$CUR" =~ ^[0-9]+$ ]] || CUR=0
+CUR=$(( CUR % N ))
+
+ARG="${1:-next}"
+case "$ARG" in
+  prev|"<"|"left"|"-")
+    IDX=$(( (CUR - 1 + N) % N ))
+    ;;
+  next|">"|"right"|"+"|"")
+    IDX=$(( (CUR + 1) % N ))
+    ;;
+  [1-4])
+    IDX=$(( ARG - 1 ))
+    ;;
+  *)
+    IDX=$(( (CUR + 1) % N ))
+    ;;
+esac
+
+# Сначала кадр — демон подхватит за десятки мс.
+echo "$IDX" > "$STATE_FILE"
+TITLE="${NAMES[$IDX]}"
+
+stop_slideshow
+notify-send -t 1200 -i preferences-desktop-wallpaper "Страж дома · Фон" "$TITLE" >/dev/null 2>&1 &

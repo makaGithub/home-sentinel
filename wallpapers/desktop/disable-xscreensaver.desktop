@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=XScreenSaver
+Comment=Disabled for demo laptop
+Exec=xscreensaver -no-splash
+TryExec=xscreensaver
+OnlyShowIn=LXQt;
+Hidden=true
+X-GNOME-Autostart-enabled=false

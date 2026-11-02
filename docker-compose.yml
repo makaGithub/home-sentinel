@@ -17,6 +17,7 @@ services:
       - .env
     environment:
       GPU_HELPER_URL: ${GPU_HELPER_URL:-http://127.0.0.1:8080}
+      DEMO_MODE: ${DEMO_MODE:-false}
       MQTT_BROKER: ${MQTT_BROKER:-}
       PRESENCE_TRACKING_ENABLED: ${PRESENCE_TRACKING_ENABLED:-false}
       # Перебивает .env: без GPU на .111 CDI иначе падает на runtime.nvidia.com/gpu=all
