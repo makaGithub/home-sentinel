@@ -9,6 +9,12 @@ import os
 # Отладочный режим (DEBUG=1 для подробных логов)
 DEBUG = os.getenv("DEBUG", "").lower() in ("true", "1", "yes")
 
+# Режим живой демонстрации: после инициализации ждёт команд в demo-консоли и ничего не шлёт в GPU
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() in ("true", "1", "yes")
+
+# Принудительная перезаливка лиц на gpu-helper (по умолчанию пропускается, если лица уже на GPU)
+FORCE_SYNC_FACES = os.getenv("FORCE_SYNC_FACES", "false").lower() in ("true", "1", "yes")
+
 # URL hs-gpu-helper (LoadBalancer в k8s). Пустой = локальный режим не поддерживается.
 GPU_HELPER_URL = os.getenv("GPU_HELPER_URL", "http://127.0.0.1:8080")
 
@@ -21,7 +27,9 @@ SCREENSHOTS_DIR = os.getenv("SCREENSHOTS_DIR", "/app/data/screenshots")
 SCREENSHOTS_ENABLED = os.getenv("SCREENSHOTS_ENABLED", "true").lower() in ("true", "1", "yes")
 
 # Сохранять скриншоты только при появлении этих объектов (через запятую в .env). Пусто = при любом изменении.
-_screenshot_objects_str = os.getenv("SCREENSHOT_OBJECTS", "person,dog")
+_screenshot_objects_str = os.getenv(
+    "SCREENSHOT_OBJECTS", "person,dog,cup,potted plant,vase,cell phone"
+)
 SCREENSHOT_OBJECTS = set(c.strip().lower() for c in _screenshot_objects_str.split(",") if c.strip())
 
 # Пути к файлам кэша (старый формат)
@@ -90,8 +98,35 @@ MAX_MISSING_OTHER = int(os.getenv("MAX_MISSING_OTHER", "120"))   # дольше 
 MIN_STABLE_OTHER = int(os.getenv("MIN_STABLE_OTHER", "25"))      # дольше должны присутствовать
 
 # Важные объекты (используют основные параметры анти-дребезга)
-_important_str = os.getenv("IMPORTANT_OBJECTS", "person,dog,cat")
-IMPORTANT_OBJECTS = set(c.strip() for c in _important_str.split(",") if c.strip())
+_important_str = os.getenv(
+    "IMPORTANT_OBJECTS", "person,dog,cat,cup,potted plant,vase,cell phone"
+)
+IMPORTANT_OBJECTS = set(c.strip().lower() for c in _important_str.split(",") if c.strip())
+
+# Приоритетные предметы для Этапа 1 демонстрации (кружка, цветок, телефон)
+_demo_priority_str = os.getenv(
+    "DEMO_PRIORITY_OBJECTS", "cup,potted plant,vase,cell phone"
+)
+DEMO_PRIORITY_OBJECTS = set(
+    c.strip().lower() for c in _demo_priority_str.split(",") if c.strip()
+)
+
+# Параметры переднего плана и фильтра дребезга на Этапе 1 (objects)
+DEMO_PRIORITY_MIN_CONF = float(os.getenv("DEMO_PRIORITY_MIN_CONF", "0.22"))
+DEMO_PRIORITY_MIN_AREA = float(os.getenv("DEMO_PRIORITY_MIN_AREA", "0.008"))  # >= 0.8% кадра
+DEMO_OTHER_MIN_CONF = float(os.getenv("DEMO_OTHER_MIN_CONF", "0.45"))
+DEMO_OTHER_MIN_AREA = float(os.getenv("DEMO_OTHER_MIN_AREA", "0.045"))        # >= 4.5% кадра (крупно на переднем плане)
+DEMO_FOREGROUND_FAST_AREA = float(os.getenv("DEMO_FOREGROUND_FAST_AREA", "0.03"))  # >= 3% кадра — близко к камере
+
+# Приоритетные звуки для Этапа «sounds»: стук, хлопки, музыка
+_demo_priority_sounds_str = os.getenv(
+    "DEMO_PRIORITY_SOUNDS",
+    "knock,tap,door,doorbell,ding-dong,slam,clapping,applause,hands,"
+    "music,musical instrument,singing,guitar,song,drum,piano",
+)
+DEMO_PRIORITY_SOUNDS = set(
+    c.strip().lower() for c in _demo_priority_sounds_str.split(",") if c.strip()
+)
 
 # Улучшения распознавания лиц
 FACE_PADDING_RATIO = float(os.getenv("FACE_PADDING_RATIO", "0.2"))        # 20% расширения bounding box

@@ -18,12 +18,11 @@ def open_camera():
     При RTSP принудительно добавляет TCP-транспорт.
     """
     src = config.VIDEO_URL
-    log(f"🎥 Подключение к удаленному видеопотоку: {src}")
+    log(f"🎥 Подключение к камере (go2rtc)...")
 
     if isinstance(src, str) and src.startswith("rtsp://") and "rtsp_transport" not in src:
         sep = "&" if "?" in src else "?"
         src += f"{sep}rtsp_transport=tcp"
-        log(f"   Использую RTSP over TCP: {src}")
 
     # Low-latency опции для OpenCV/FFMPEG (чтобы не копить кадры “на минуты”)
     # Важно: переменная окружения должна быть задана ДО создания VideoCapture.

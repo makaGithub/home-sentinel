@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=>> Слайдшоу фонов
+Comment=Автосмена фонов выступления: 0:00 → 0:45 → 2:28
+Exec=/home/a.zhizhin/Pictures/wallpapers/run_wallpapers.sh
+Icon=/home/a.zhizhin/.local/share/icons/maka-slideshow-play.svg
+Terminal=false
+Categories=Utility;
+Keywords=wallpaper;slideshow;demo;sentinel;

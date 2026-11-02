@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Слайдшоу фонов (автостарт)
+Comment=Автозапуск слайдшоу фонов выступления при входе в LXQt (сейчас выключен)
+Exec=/home/a.zhizhin/Pictures/wallpapers/run_wallpapers.sh
+Icon=/home/a.zhizhin/.local/share/icons/maka-slideshow-play.svg
+Terminal=false
+X-GNOME-Autostart-enabled=false
+Hidden=true
+X-LXQt-Module=false
+OnlyShowIn=LXQt;
+Categories=Utility;

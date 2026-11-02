@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=< Предыдущий фон
+Comment=Стоп слайдшоу и предыдущий слайд
+Exec=/home/a.zhizhin/.local/bin/switch-wallpaper prev
+Icon=/home/a.zhizhin/.local/share/icons/maka-wall-prev.svg
+Terminal=false
+StartupNotify=false
+Categories=Utility;
+Keywords=wallpaper;prev;demo;sentinel;

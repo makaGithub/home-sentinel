@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=> Следующий фон
+Comment=Стоп слайдшоу и следующий слайд (совместимость)
+Exec=/home/a.zhizhin/.local/bin/switch-wallpaper next
+Icon=/home/a.zhizhin/.local/share/icons/maka-wall-next.svg
+Terminal=false
+NoDisplay=true
+Categories=Utility;
