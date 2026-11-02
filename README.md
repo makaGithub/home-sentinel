@@ -11,10 +11,11 @@ home-sentinel/
 │   ├── models/             # Модели InsightFace и YOLO
 │   └── .buildx-cache/      # Docker buildx кэш
 ├── docker-compose.yml      # Конфигурация Docker Compose
-└── scripts/                # Вспомогательные скрипты
-    ├── deploy.sh           # Скрипт деплоя
-    └── setup-host.sh       # Скрипт настройки хоста
+├── scripts/                # Вспомогательные скрипты (deploy, wallpaper-daemon, …)
+└── wallpapers/             # Слайдшоу демо (JPEG/GIF — Google Drive, см. wallpapers/README.md)
 ```
+
+**Фоны демо:** бинарники не в git — [`wallpapers/README.md`](wallpapers/README.md).
 
 ### Компоненты
 

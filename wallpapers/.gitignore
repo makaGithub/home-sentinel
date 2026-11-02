@@ -1,3 +1,10 @@
 .venv/
 __pycache__/
 *.pyc
+.DS_Store
+
+# Тяжёлые артефакты — скачивать с Google Drive (см. README.md)
+out/*
+!out/.gitkeep
+strazh_wallpaper_base.jpg
+*.gif
